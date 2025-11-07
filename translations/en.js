@@ -1,0 +1,23 @@
+export default {
+  "welcome_title": "Turing Test Challenge",
+  "welcome_description": "You have 60 seconds to chat with a mysterious partner. Your mission: determine if they are a real human or a clever AI. Pay close attention to their words, style, and personality. Can you tell the difference?",
+  "start_chatting": "Start Chatting",
+  "score": "Score",
+  "type_your_message": "Type your message...",
+  "times_up": "Time's Up!",
+  "guess_prompt": "What was your chat partner?",
+  "human": "Human",
+  "ai": "AI",
+  "correct_guess_title": "Correct!",
+  "fooled_guess_title": "Fooled Ya!",
+  "correct_guess_ai": "You have a sharp eye! Your partner was indeed an AI. You've earned a point.",
+  "correct_guess_human": "Impressive intuition! Your partner was a real human. You've earned a point.",
+  "fooled_guess_ai": "You thought it was a human, but you were chatting with an advanced AI! Better luck next time.",
+  "fooled_guess_human": "You thought it was an AI, but that was a real person you were talking to! Better luck next time.",
+  "play_again": "Play Again",
+  "settings_title": "Settings",
+  "language": "Language",
+  "sound_effects": "Sound Effects",
+  "vibration": "Vibration",
+  "close": "Close"
+}

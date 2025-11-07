@@ -1,0 +1,5 @@
+{
+  "name": "Turing Test Challenge",
+  "description": "A chat application where you have 60 seconds to determine if your chat partner is a human or a sophisticated AI. Test your intuition!",
+  "requestFramePermissions": []
+}
