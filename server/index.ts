@@ -211,9 +211,41 @@ io.on('connection', (socket: Socket) => {
 
       socket.emit('reveal-partner', {
         actualPartnerType: match.actualPartnerType,
+        matchId: match.id,
       });
     } catch (error) {
       console.error('Error in time-up:', error);
+    }
+  });
+
+  // Handle guess submission
+  socket.on('submit-guess', async ({ matchId, guess }: { matchId: string; guess: 'HUMAN' | 'AI' }) => {
+    try {
+      const userId = socketToUser.get(socket.id);
+      if (!userId) {
+        socket.emit('guess-result', { error: 'User not found' });
+        return;
+      }
+
+      const match = matchmakingService.getMatchForUser(userId);
+      if (!match || match.id !== matchId) {
+        socket.emit('guess-result', { error: 'Invalid match' });
+        return;
+      }
+
+      const wasCorrect = guess === match.actualPartnerType;
+
+      // For guest users (non-authenticated), just return the result without updating database
+      socket.emit('guess-result', {
+        wasCorrect,
+        score: 0,
+        gamesPlayed: 0,
+        gamesWon: 0,
+        gamesLost: 0
+      });
+    } catch (error) {
+      console.error('Error in submit-guess:', error);
+      socket.emit('guess-result', { error: 'Failed to submit guess' });
     }
   });
 
