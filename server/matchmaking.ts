@@ -2,6 +2,7 @@ import { User, Match } from './types.js';
 import { aiService } from './aiService.js';
 import type { AIBehavior } from './ai/baseProvider.js';
 import { v4 as uuidv4 } from 'uuid';
+import { adminConfigService } from './adminConfig.js';
 
 export class MatchmakingService {
   private waitingQueue: User[] = [];
@@ -9,9 +10,14 @@ export class MatchmakingService {
   private userToMatch: Map<string, string> = new Map(); // userId -> matchId
   private matchTimeouts: Map<string, NodeJS.Timeout> = new Map();
 
-  // Configuration
-  private readonly MATCH_TIMEOUT_MS = 10000; // 15 seconds before matching with AI
-  private readonly AI_MATCH_PROBABILITY = 0.5; // 50% chance to match with AI
+  // Configuration - now loaded from admin config
+  private get MATCH_TIMEOUT_MS(): number {
+    return adminConfigService.getMatchTimeoutMs();
+  }
+
+  private get AI_MATCH_PROBABILITY(): number {
+    return adminConfigService.getAIMatchProbability();
+  }
 
   addToQueue(user: User): void {
     console.log(`User ${user.id} added to queue`);
@@ -92,9 +98,8 @@ export class MatchmakingService {
 
     const matchId = uuidv4();
 
-    // Randomly decide if AI should act human-like or AI-like
-    const shouldActHuman = Math.random() < 0.5;
-    const behavior: AIBehavior = shouldActHuman ? 'HUMAN_LIKE' : 'AI_LIKE';
+    // Get AI behavior from admin configuration
+    const behavior: AIBehavior = adminConfigService.getAIBehavior();
 
     console.log(`AI will act as: ${behavior} for match ${matchId}`);
 
