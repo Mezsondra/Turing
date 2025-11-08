@@ -4,6 +4,10 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   username TEXT UNIQUE,
+  score INTEGER DEFAULT 0,
+  games_played INTEGER DEFAULT 0,
+  games_won INTEGER DEFAULT 0,
+  games_lost INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

@@ -38,5 +38,13 @@
   "per_month": "/ month",
   "cancel_anytime": "Cancel anytime",
   "start_premium": "Start Premium",
-  "secure_payment": "Secure payment powered by Stripe"
+  "secure_payment": "Secure payment powered by Stripe",
+  "your_score": "Your Score",
+  "total_score": "Total Score",
+  "games_played": "Games Played",
+  "games_won": "Games Won",
+  "games_lost": "Games Lost",
+  "win_rate": "Win Rate",
+  "points_earned": "Points Earned",
+  "points_lost": "Points Lost"
 }

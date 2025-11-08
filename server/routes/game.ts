@@ -11,6 +11,7 @@ router.get('/stats', requireAuth, async (req: AuthRequest, res) => {
     const userId = req.userId!;
     const stats = db.getUserStats(userId);
     const totalGames = db.getTotalGameCount(userId);
+    const user = db.getUserById(userId);
 
     res.json({
       stats: {
@@ -18,6 +19,10 @@ router.get('/stats', requireAuth, async (req: AuthRequest, res) => {
         correct: stats.correct,
         accuracy: Math.round(stats.accuracy * 10) / 10,
         totalGames,
+        score: user?.score || 0,
+        gamesPlayed: user?.games_played || 0,
+        gamesWon: user?.games_won || 0,
+        gamesLost: user?.games_lost || 0,
       },
     });
   } catch (error) {
@@ -67,11 +72,24 @@ router.put('/session/:sessionId', requireAuth, async (req: AuthRequest, res) => 
 
     db.updateGameSession(sessionId, guess, wasCorrect);
 
+    // Update user score
+    db.updateUserScore(userId, wasCorrect);
+
+    // Get updated user data with score
+    const user = db.getUserById(userId);
+
     // Get updated stats
     const totalGames = db.getTotalGameCount(userId);
     const shouldShowAd = totalGames % 5 === 0 && totalGames > 0;
 
-    res.json({ success: true, shouldShowAd });
+    res.json({
+      success: true,
+      shouldShowAd,
+      score: user?.score || 0,
+      gamesPlayed: user?.games_played || 0,
+      gamesWon: user?.games_won || 0,
+      gamesLost: user?.games_lost || 0
+    });
   } catch (error) {
     console.error('Error updating game session:', error);
     res.status(500).json({ error: 'Failed to update game session' });

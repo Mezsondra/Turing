@@ -9,7 +9,7 @@ import { triggerVibration } from '../lib/vibration';
 import { socketService } from '../services/socketService';
 
 interface ChatScreenProps {
-  onTimeUp: (actualPartner: 'HUMAN' | 'AI') => void;
+  onTimeUp: (actualPartner: 'HUMAN' | 'AI', matchId: string) => void;
   score: number;
 }
 
@@ -69,11 +69,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
           }
         });
 
-        socketService.onRevealPartner(({ actualPartnerType: partnerType }) => {
+        socketService.onRevealPartner(({ actualPartnerType: partnerType, matchId: revealedMatchId }) => {
           if (mounted) {
-            console.log('Partner revealed:', partnerType);
+            console.log('Partner revealed:', partnerType, 'matchId:', revealedMatchId);
             setActualPartnerType(partnerType);
             actualPartnerTypeRef.current = partnerType;
+            // Update matchId if provided
+            if (revealedMatchId && !matchId) {
+              setMatchId(revealedMatchId);
+            }
           }
         });
 
@@ -173,11 +177,11 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     revealTimeoutRef.current = setTimeout(() => {
       const partnerType = actualPartnerTypeRef.current;
       if (partnerType) {
-        onTimeUp(partnerType);
+        onTimeUp(partnerType, matchId || '');
       } else {
-        // Fallback if reveal didn't arrive
+        // Fallback if reveal didn't arrived
         console.warn('Partner type not revealed, using fallback');
-        onTimeUp('AI');
+        onTimeUp('AI', matchId || '');
       }
     }, 500);
   };

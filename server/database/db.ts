@@ -11,6 +11,10 @@ export interface User {
   email: string;
   password_hash: string;
   username?: string;
+  score: number;
+  games_played: number;
+  games_won: number;
+  games_lost: number;
   created_at: number;
   updated_at: number;
 }
@@ -49,20 +53,39 @@ class DatabaseService {
   private initialize(): void {
     const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf-8');
     this.db.exec(schema);
+
+    // Run migrations for existing databases
+    this.runMigrations();
+
     console.log('Database initialized');
   }
 
+  private runMigrations(): void {
+    // Add score columns if they don't exist (for existing databases)
+    try {
+      this.db.exec(`
+        ALTER TABLE users ADD COLUMN score INTEGER DEFAULT 0;
+        ALTER TABLE users ADD COLUMN games_played INTEGER DEFAULT 0;
+        ALTER TABLE users ADD COLUMN games_won INTEGER DEFAULT 0;
+        ALTER TABLE users ADD COLUMN games_lost INTEGER DEFAULT 0;
+      `);
+      console.log('Score columns added to users table');
+    } catch (error) {
+      // Columns already exist, ignore error
+    }
+  }
+
   // User operations
-  createUser(user: Omit<User, 'created_at' | 'updated_at'>): User {
+  createUser(user: Omit<User, 'created_at' | 'updated_at' | 'score' | 'games_played' | 'games_won' | 'games_lost'>): User {
     const now = Date.now();
     const stmt = this.db.prepare(`
-      INSERT INTO users (id, email, password_hash, username, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO users (id, email, password_hash, username, score, games_played, games_won, games_lost, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 0, 0, 0, 0, ?, ?)
     `);
 
     stmt.run(user.id, user.email, user.password_hash, user.username || null, now, now);
 
-    return { ...user, created_at: now, updated_at: now };
+    return { ...user, score: 0, games_played: 0, games_won: 0, games_lost: 0, created_at: now, updated_at: now };
   }
 
   getUserById(id: string): User | undefined {
@@ -73,6 +96,23 @@ class DatabaseService {
   getUserByEmail(email: string): User | undefined {
     const stmt = this.db.prepare('SELECT * FROM users WHERE email = ?');
     return stmt.get(email) as User | undefined;
+  }
+
+  updateUserScore(userId: string, won: boolean): void {
+    const now = Date.now();
+    const pointsChange = won ? 10 : -5; // +10 for correct guess, -5 for wrong guess
+
+    const stmt = this.db.prepare(`
+      UPDATE users
+      SET score = score + ?,
+          games_played = games_played + 1,
+          games_won = games_won + ?,
+          games_lost = games_lost + ?,
+          updated_at = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(pointsChange, won ? 1 : 0, won ? 0 : 1, now, userId);
   }
 
   // Subscription operations

@@ -14,6 +14,16 @@ interface MessageEvent {
 
 interface RevealPartnerEvent {
   actualPartnerType: 'HUMAN' | 'AI';
+  matchId: string;
+}
+
+interface GuessResultEvent {
+  wasCorrect: boolean;
+  score: number;
+  gamesPlayed: number;
+  gamesWon: number;
+  gamesLost: number;
+  error?: string;
 }
 
 export class SocketService {
@@ -78,6 +88,13 @@ export class SocketService {
     this.socket.emit('time-up');
   }
 
+  submitGuess(matchId: string, guess: 'HUMAN' | 'AI'): void {
+    if (!this.socket) {
+      throw new Error('Socket not connected');
+    }
+    this.socket.emit('submit-guess', { matchId, guess });
+  }
+
   onSearching(callback: () => void): void {
     if (!this.socket) return;
     this.socket.on('searching', callback);
@@ -111,6 +128,11 @@ export class SocketService {
   onError(callback: (data: { message: string }) => void): void {
     if (!this.socket) return;
     this.socket.on('error', callback);
+  }
+
+  onGuessResult(callback: (data: GuessResultEvent) => void): void {
+    if (!this.socket) return;
+    this.socket.on('guess-result', callback);
   }
 
   removeAllListeners(): void {
