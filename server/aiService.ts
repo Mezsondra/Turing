@@ -73,8 +73,13 @@ export class AIService {
 
   async createSession(matchId: string, language: Language, behavior: AIBehavior): Promise<void> {
     const { provider } = this.getOrCreateProvider();
-    await provider.createSession(matchId, language, behavior);
     this.matchProviders.set(matchId, provider);
+    try {
+      await provider.createSession(matchId, language, behavior);
+    } catch (error) {
+      this.matchProviders.delete(matchId);
+      throw error;
+    }
   }
 
   async sendMessage(matchId: string, message: string): Promise<string> {
