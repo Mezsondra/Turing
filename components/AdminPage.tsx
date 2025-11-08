@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import useAdminState from '../hooks/useAdminState';
 import PromptEditor from './PromptEditor';
+
+type ProviderKey = 'gemini' | 'openai' | 'xai';
+
+type ProviderDrafts = Record<ProviderKey, {
+  apiKey: string;
+  model: string;
+  apiBaseUrl?: string;
+}>;
 
 // Reusable components for the Admin Page UI
 const AdminCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -40,6 +48,59 @@ const AdminPage: React.FC = () => {
 
   const [newLanguageCode, setNewLanguageCode] = useState('');
   const [showAddLanguage, setShowAddLanguage] = useState(false);
+  const [providerDrafts, setProviderDrafts] = useState<ProviderDrafts>({
+    gemini: { apiKey: '', model: '', apiBaseUrl: '' },
+    openai: { apiKey: '', model: '', apiBaseUrl: '' },
+    xai: { apiKey: '', model: '', apiBaseUrl: '' },
+  });
+
+  useEffect(() => {
+    if (state.config) {
+      setProviderDrafts({
+        gemini: { ...state.config.aiProviders.gemini },
+        openai: { ...state.config.aiProviders.openai },
+        xai: { ...state.config.aiProviders.xai },
+      });
+    }
+  }, [state.config]);
+
+  const providerLabels: Record<ProviderKey, string> = {
+    gemini: 'Google Gemini',
+    openai: 'OpenAI',
+    xai: 'XAI',
+  };
+
+  const handleProviderDraftChange = (
+    provider: ProviderKey,
+    field: 'apiKey' | 'model' | 'apiBaseUrl',
+    value: string,
+  ) => {
+    setProviderDrafts(prev => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleProviderSave = (provider: ProviderKey) => {
+    if (!state.config) return;
+    const current = state.config.aiProviders[provider];
+    const draft = providerDrafts[provider];
+
+    if (
+      current &&
+      draft &&
+      current.apiKey === draft.apiKey &&
+      current.model === draft.model &&
+      (current.apiBaseUrl || '') === (draft.apiBaseUrl || '')
+    ) {
+      return;
+    }
+
+    updateConfig({ aiProviders: { [provider]: draft } });
+  };
 
   if (!state.isAuthenticated) {
     return (
@@ -132,7 +193,7 @@ const AdminPage: React.FC = () => {
                 <select
                   value={state.config.aiProvider}
                   onChange={(e) =>
-                    updateConfig({ aiProvider: e.target.value as 'gemini' | 'openai' | 'xai' })
+                    updateConfig({ aiProvider: e.target.value as ProviderKey })
                   }
                   className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   disabled={state.loading}
@@ -142,6 +203,69 @@ const AdminPage: React.FC = () => {
                   <option value="xai">XAI</option>
                 </select>
               </LabeledInput>
+
+              <div className="space-y-4 pt-2">
+                {(Object.keys(providerLabels) as ProviderKey[]).map((provider) => {
+                  const currentSettings = state.config.aiProviders[provider];
+                  const draftSettings = providerDrafts[provider];
+                  const hasChanges = Boolean(
+                    currentSettings &&
+                      draftSettings &&
+                      (
+                        currentSettings.apiKey !== draftSettings.apiKey ||
+                        currentSettings.model !== draftSettings.model ||
+                        (currentSettings.apiBaseUrl || '') !== (draftSettings.apiBaseUrl || '')
+                      ),
+                  );
+                  const saveButtonClasses = `bg-cyan-600 hover:bg-cyan-700 text-white flex items-center justify-center gap-2 ${hasChanges ? '' : 'opacity-50 cursor-not-allowed'}`;
+
+                  return (
+                    <div key={provider} className="bg-slate-700/30 p-4 rounded-lg space-y-3">
+                      <h3 className="text-lg font-semibold text-cyan-200">{providerLabels[provider]} Settings</h3>
+                      <LabeledInput label="API Key" description="Stored securely on the server">
+                        <input
+                          type="password"
+                          value={providerDrafts[provider]?.apiKey || ''}
+                          onChange={(e) => handleProviderDraftChange(provider, 'apiKey', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          placeholder="Enter API key"
+                          autoComplete="off"
+                        />
+                      </LabeledInput>
+                      <LabeledInput label="Model" description="Select the model to use for this provider">
+                        <input
+                          type="text"
+                          value={providerDrafts[provider]?.model || ''}
+                          onChange={(e) => handleProviderDraftChange(provider, 'model', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          placeholder="e.g., gpt-4o-mini"
+                        />
+                      </LabeledInput>
+                      {(provider === 'openai' || provider === 'xai') && (
+                        <LabeledInput
+                          label="API Base URL"
+                          description="Override the default endpoint if using a compatible service"
+                        >
+                          <input
+                            type="text"
+                            value={providerDrafts[provider]?.apiBaseUrl || ''}
+                            onChange={(e) => handleProviderDraftChange(provider, 'apiBaseUrl', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            placeholder="https://api.openai.com/v1"
+                          />
+                        </LabeledInput>
+                      )}
+                      <AdminButton
+                        onClick={() => handleProviderSave(provider)}
+                        className={saveButtonClasses}
+                        disabled={state.loading}
+                      >
+                        Save {providerLabels[provider]} Settings
+                      </AdminButton>
+                    </div>
+                  );
+                })}
+              </div>
             </AdminCard>
 
             <AdminCard title="Language Management">

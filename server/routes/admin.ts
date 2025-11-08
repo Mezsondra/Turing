@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { adminConfigService } from '../adminConfig.js';
+import { AIProviderFactory } from '../aiService.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.put('/config', requireAdmin, (req: Request, res: Response) => {
   try {
     const updates = req.body;
     adminConfigService.updateConfig(updates);
+    AIProviderFactory.reloadProvider();
     res.json({ success: true, config: adminConfigService.getConfig() });
   } catch (error) {
     console.error('Error updating admin config:', error);
@@ -42,6 +44,7 @@ router.put('/config', requireAdmin, (req: Request, res: Response) => {
 router.post('/reset', requireAdmin, (req: Request, res: Response) => {
   try {
     adminConfigService.resetToDefaults();
+    AIProviderFactory.reloadProvider();
     res.json({ success: true, config: adminConfigService.getConfig() });
   } catch (error) {
     console.error('Error resetting config:', error);

@@ -1,4 +1,3 @@
-import { AIBehavior } from './ai/baseProvider.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,9 +5,20 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface AIProviderSettings {
+  apiKey: string;
+  model: string;
+  apiBaseUrl?: string;
+}
+
 export interface AdminConfiguration {
   // Provider Settings
   aiProvider: 'gemini' | 'openai' | 'xai';
+  aiProviders: {
+    gemini: AIProviderSettings;
+    openai: AIProviderSettings;
+    xai: AIProviderSettings;
+  };
 
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
@@ -35,6 +45,22 @@ export class AdminConfigService {
   private getDefaultConfig(): AdminConfiguration {
     return {
       aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'xai') || 'gemini',
+      aiProviders: {
+        gemini: {
+          apiKey: process.env.GEMINI_API_KEY || '',
+          model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        },
+        openai: {
+          apiKey: process.env.OPENAI_API_KEY || '',
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          apiBaseUrl: process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1',
+        },
+        xai: {
+          apiKey: process.env.XAI_API_KEY || '',
+          model: process.env.XAI_MODEL || 'grok-1.5-flash',
+          apiBaseUrl: process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1',
+        },
+      },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
       languages: ['en', 'tr'], // Default languages
@@ -51,8 +77,31 @@ export class AdminConfigService {
         const data = fs.readFileSync(this.configPath, 'utf-8');
         const loadedConfig = JSON.parse(data);
 
-        // Merge with defaults to ensure all fields exist
-        return { ...this.getDefaultConfig(), ...loadedConfig };
+        const defaultConfig = this.getDefaultConfig();
+
+        return {
+          ...defaultConfig,
+          ...loadedConfig,
+          aiProviders: {
+            gemini: {
+              ...defaultConfig.aiProviders.gemini,
+              ...(loadedConfig.aiProviders?.gemini || {}),
+            },
+            openai: {
+              ...defaultConfig.aiProviders.openai,
+              ...(loadedConfig.aiProviders?.openai || {}),
+            },
+            xai: {
+              ...defaultConfig.aiProviders.xai,
+              ...(loadedConfig.aiProviders?.xai || {}),
+            },
+          },
+          prompts: {
+            ...defaultConfig.prompts,
+            ...(loadedConfig.prompts || {}),
+          },
+          languages: loadedConfig.languages || defaultConfig.languages,
+        };
       }
     } catch (error) {
       console.error('Error loading admin config:', error);
@@ -82,6 +131,10 @@ export class AdminConfigService {
     return this.config.aiProvider;
   }
 
+  getProviderSettings(provider: 'gemini' | 'openai' | 'xai'): AIProviderSettings {
+    return { ...this.config.aiProviders[provider] };
+  }
+
   getAIMatchProbability(): number {
     return this.config.aiMatchProbability;
   }
@@ -99,27 +152,35 @@ export class AdminConfigService {
   }
 
   getXAIApiKey(): string | undefined {
-    return process.env.XAI_API_KEY;
+    return this.config.aiProviders.xai.apiKey || process.env.XAI_API_KEY;
   }
 
   getXAIModel(): string {
-    return process.env.XAI_MODEL || 'grok-1.5-flash';
+    return this.config.aiProviders.xai.model || process.env.XAI_MODEL || 'grok-1.5-flash';
+  }
+
+  getXAIBaseUrl(): string {
+    return this.config.aiProviders.xai.apiBaseUrl || process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1';
   }
 
   getGeminiApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY;
+    return this.config.aiProviders.gemini.apiKey || process.env.GEMINI_API_KEY;
   }
 
   getGeminiModel(): string {
-    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    return this.config.aiProviders.gemini.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
   getOpenAIApiKey(): string | undefined {
-    return process.env.OPENAI_API_KEY;
+    return this.config.aiProviders.openai.apiKey || process.env.OPENAI_API_KEY;
   }
 
   getOpenAIModel(): string {
-    return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    return this.config.aiProviders.openai.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  }
+
+  getOpenAIBaseUrl(): string {
+    return this.config.aiProviders.openai.apiBaseUrl || process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
   }
 
 
@@ -165,7 +226,36 @@ export class AdminConfigService {
   }
 
   updateConfig(updates: Partial<AdminConfiguration>): void {
-    this.config = { ...this.config, ...updates };
+    const currentConfig = this.config;
+
+    this.config = {
+      ...currentConfig,
+      ...updates,
+      aiProviders: {
+        ...currentConfig.aiProviders,
+        ...(updates.aiProviders
+          ? {
+              gemini: {
+                ...currentConfig.aiProviders.gemini,
+                ...(updates.aiProviders.gemini || {}),
+              },
+              openai: {
+                ...currentConfig.aiProviders.openai,
+                ...(updates.aiProviders.openai || {}),
+              },
+              xai: {
+                ...currentConfig.aiProviders.xai,
+                ...(updates.aiProviders.xai || {}),
+              },
+            }
+          : currentConfig.aiProviders),
+      },
+      prompts: {
+        ...currentConfig.prompts,
+        ...(updates.prompts || {}),
+      },
+      languages: updates.languages || currentConfig.languages,
+    };
     this.saveConfig(this.config);
   }
 

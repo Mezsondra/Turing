@@ -21,20 +21,22 @@ export class AIProviderFactory {
       case 'openai': {
         const apiKey = adminConfigService.getOpenAIApiKey();
         const model = adminConfigService.getOpenAIModel();
+        const baseUrl = adminConfigService.getOpenAIBaseUrl();
         if (!apiKey) {
           throw new Error('OpenAI API key not configured');
         }
-        this.currentProvider = new OpenAIProvider(apiKey, model);
+        this.currentProvider = new OpenAIProvider(apiKey, model, baseUrl);
         break;
       }
       case 'xai': {
         const apiKey = adminConfigService.getXAIApiKey();
         const model = adminConfigService.getXAIModel();
+        const baseUrl = adminConfigService.getXAIBaseUrl();
         if (!apiKey) {
           throw new Error('XAI API key not configured');
         }
         // XAI uses OpenAI-compatible API
-        this.currentProvider = new OpenAIProvider(apiKey, model, 'https://api.x.ai/v1');
+        this.currentProvider = new OpenAIProvider(apiKey, model, baseUrl);
         break;
       }
       case 'gemini':
