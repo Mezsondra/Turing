@@ -130,3 +130,11 @@ export class GeminiProvider implements AIProvider {
     return this.sessions.has(matchId);
   }
 }
+import { adminConfigService } from '../adminConfig.js';
+
+// Create and export a singleton instance
+const apiKey = adminConfigService.getGeminiApiKey();
+const model = adminConfigService.getGeminiModel();
+
+export const geminiProvider = new GeminiProvider(apiKey, model);
+
