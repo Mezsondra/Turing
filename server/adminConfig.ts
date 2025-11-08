@@ -132,6 +132,23 @@ export class AdminConfigService {
     return process.env.XAI_MODEL || 'grok-1.5-flash';
   }
 
+  getGeminiApiKey(): string | undefined {
+    return process.env.GEMINI_API_KEY;
+  }
+
+  getGeminiModel(): string {
+    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  }
+
+  getOpenAIApiKey(): string | undefined {
+    return process.env.OPENAI_API_KEY;
+  }
+
+  getOpenAIModel(): string {
+    return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  }
+
+
   // Setters
   setAIDefaultBehavior(behavior: AIBehavior): void {
     this.config.aiDefaultBehavior = behavior;
