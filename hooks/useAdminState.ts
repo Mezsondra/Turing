@@ -1,7 +1,16 @@
 import { useState } from 'react';
-import { AdminConfig } from '../../types';
 
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+
+interface AdminConfig {
+  aiProvider: 'gemini' | 'openai' | 'xai';
+  aiMatchProbability: number;
+  matchTimeoutMs: number;
+  languages: string[];
+  prompts: {
+    [languageCode: string]: string;
+  };
+}
 
 interface AdminState {
   isAuthenticated: boolean;
@@ -128,23 +137,98 @@ const useAdminState = () => {
     }
   };
 
-  const savePrompt = async (type: 'humanLike' | 'aiLike', lang: 'en' | 'tr', value: string) => {
-    if (!state.config) return;
+  const savePrompt = async (languageCode: string, value: string) => {
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
 
-    const newConfig: AdminConfig = {
-      ...state.config,
-      prompts: {
-        ...state.config.prompts,
-        global: {
-          ...state.config.prompts.global,
-          [type]: {
-            ...state.config.prompts.global[type],
-            [lang]: value,
-          },
+    try {
+      const response = await fetch(`${API_URL}/api/admin/prompts/${languageCode}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: state.authToken,
+          'Content-Type': 'application/json',
         },
-      },
-    };
-    await updateConfig(newConfig);
+        body: JSON.stringify({ prompt: value }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: 'Prompt updated successfully!',
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        setState(prevState => ({ ...prevState, error: 'Failed to update prompt', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
+  };
+
+  const addLanguage = async (languageCode: string, prompt: string = '') => {
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/languages`, {
+        method: 'POST',
+        headers: {
+          Authorization: state.authToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ languageCode, prompt }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: `Language ${languageCode} added successfully!`,
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        const errorData = await response.json();
+        setState(prevState => ({ ...prevState, error: errorData.error || 'Failed to add language', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
+  };
+
+  const removeLanguage = async (languageCode: string) => {
+    if (!confirm(`Are you sure you want to remove the language "${languageCode}"?`)) {
+      return;
+    }
+
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/languages/${languageCode}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: state.authToken,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: `Language ${languageCode} removed successfully!`,
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        const errorData = await response.json();
+        setState(prevState => ({ ...prevState, error: errorData.error || 'Failed to remove language', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
   };
 
   return {
@@ -155,6 +239,8 @@ const useAdminState = () => {
     login,
     reset,
     savePrompt,
+    addLanguage,
+    removeLanguage,
     updateConfig,
   };
 };

@@ -1,7 +1,7 @@
-import React from 'react';
-import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import React, { useState } from 'react';
+import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import useAdminState from '../hooks/useAdminState';
-import PromptEditor from './PromptEditor'; // Assuming PromptEditor is in the same directory
+import PromptEditor from './PromptEditor';
 
 // Reusable components for the Admin Page UI
 const AdminCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -33,8 +33,13 @@ const AdminPage: React.FC = () => {
     login,
     reset,
     savePrompt,
+    addLanguage,
+    removeLanguage,
     updateConfig,
   } = useAdminState();
+
+  const [newLanguageCode, setNewLanguageCode] = useState('');
+  const [showAddLanguage, setShowAddLanguage] = useState(false);
 
   if (!state.isAuthenticated) {
     return (
@@ -89,6 +94,13 @@ const AdminPage: React.FC = () => {
 
   if (!state.config) return null;
 
+  const handleAddLanguage = () => {
+    if (!newLanguageCode.trim()) return;
+    addLanguage(newLanguageCode.trim().toLowerCase());
+    setNewLanguageCode('');
+    setShowAddLanguage(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-black to-slate-800 p-4">
       <div className="max-w-7xl mx-auto">
@@ -115,82 +127,103 @@ const AdminPage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <AdminCard title="AI Behavior">
-                <LabeledInput label={`Human-Like Ratio: ${Math.round(state.config.humanLikeRatio * 100)}%`} description="Probability that AI acts human-like vs assistant-like">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={state.config.humanLikeRatio * 100}
-                    onChange={(e) =>
-                      updateConfig({ humanLikeRatio: parseInt(e.target.value) / 100 })
-                    }
-                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                    disabled={state.loading}
-                  />
-                </LabeledInput>
-                <LabeledInput label="Default Behavior">
-                  <select
-                    value={state.config.aiDefaultBehavior}
-                    onChange={(e) =>
-                      updateConfig({
-                        aiDefaultBehavior: e.target.value as 'HUMAN_LIKE' | 'AI_LIKE',
-                      })
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    disabled={state.loading}
-                  >
-                    <option value="HUMAN_LIKE">Human-Like</option>
-                    <option value="AI_LIKE">AI Assistant-Like</option>
-                  </select>
-                </LabeledInput>
-              </AdminCard>
+            <AdminCard title="AI Provider">
+              <LabeledInput label="Provider">
+                <select
+                  value={state.config.aiProvider}
+                  onChange={(e) =>
+                    updateConfig({ aiProvider: e.target.value as 'gemini' | 'openai' | 'xai' })
+                  }
+                  className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  disabled={state.loading}
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="xai">XAI</option>
+                </select>
+              </LabeledInput>
+            </AdminCard>
 
-              <AdminCard title="AI Provider">
-                <LabeledInput label="Provider">
-                  <select
-                    value={state.config.aiProvider}
-                    onChange={(e) =>
-                      updateConfig({ aiProvider: e.target.value as 'gemini' | 'openai' | 'xai' })
-                    }
-                    className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    disabled={state.loading}
-                  >
-                    <option value="gemini">Google Gemini</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="xai">XAI</option>
-                  </select>
-                </LabeledInput>
-              </AdminCard>
-            </div>
+            <AdminCard title="Language Management">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-slate-300">Manage available languages</p>
+                <button
+                  onClick={() => setShowAddLanguage(!showAddLanguage)}
+                  className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
+                  disabled={state.loading}
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  Add Language
+                </button>
+              </div>
+
+              {showAddLanguage && (
+                <div className="bg-slate-700/50 p-4 rounded-lg mb-4">
+                  <LabeledInput label="Language Code" description="e.g., 'es' for Spanish, 'fr' for French">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newLanguageCode}
+                        onChange={(e) => setNewLanguageCode(e.target.value)}
+                        className="flex-1 bg-slate-600 border border-slate-500 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        placeholder="Language code"
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddLanguage()}
+                      />
+                      <button
+                        onClick={handleAddLanguage}
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors"
+                        disabled={state.loading || !newLanguageCode.trim()}
+                      >
+                        Add
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAddLanguage(false);
+                          setNewLanguageCode('');
+                        }}
+                        className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-md transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </LabeledInput>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {state.config.languages.map((lang) => (
+                  <div key={lang} className="flex items-center justify-between bg-slate-700/30 p-3 rounded-lg">
+                    <span className="text-white font-mono">{lang}</span>
+                    {lang !== 'en' && (
+                      <button
+                        onClick={() => removeLanguage(lang)}
+                        className="bg-red-600/80 hover:bg-red-600 text-white px-3 py-1 rounded-md flex items-center gap-1 transition-colors"
+                        disabled={state.loading}
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                        Remove
+                      </button>
+                    )}
+                    {lang === 'en' && (
+                      <span className="text-slate-400 text-sm">Default language</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </AdminCard>
 
             <AdminCard title="AI Prompts">
+              <p className="text-slate-400 text-sm mb-4">Configure the AI's behavior prompt for each language</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <PromptEditor
-                  title="Human-Like (English)"
-                  initialValue={state.config.prompts.global.humanLike.en}
-                  onSave={(value) => savePrompt('humanLike', 'en', value)}
-                  loading={state.loading}
-                />
-                <PromptEditor
-                  title="Human-Like (Turkish)"
-                  initialValue={state.config.prompts.global.humanLike.tr}
-                  onSave={(value) => savePrompt('humanLike', 'tr', value)}
-                  loading={state.loading}
-                />
-                <PromptEditor
-                  title="AI-Like (English)"
-                  initialValue={state.config.prompts.global.aiLike.en}
-                  onSave={(value) => savePrompt('aiLike', 'en', value)}
-                  loading={state.loading}
-                />
-                <PromptEditor
-                  title="AI-Like (Turkish)"
-                  initialValue={state.config.prompts.global.aiLike.tr}
-                  onSave={(value) => savePrompt('aiLike', 'tr', value)}
-                  loading={state.loading}
-                />
+                {state.config.languages.map((lang) => (
+                  <PromptEditor
+                    key={lang}
+                    title={`Prompt (${lang.toUpperCase()})`}
+                    initialValue={state.config.prompts[lang] || ''}
+                    onSave={(value) => savePrompt(lang, value)}
+                    loading={state.loading}
+                  />
+                ))}
               </div>
             </AdminCard>
           </div>
@@ -226,13 +259,13 @@ const AdminPage: React.FC = () => {
             </AdminCard>
 
             <AdminCard title="Quick Actions">
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 1.0, aiDefaultBehavior: 'HUMAN_LIKE' })} className="bg-green-600 hover:bg-green-700" disabled={state.loading}>
-                Force 100% Human-Like
+              <AdminButton onClick={() => updateConfig({ aiMatchProbability: 1.0 })} className="bg-green-600 hover:bg-green-700" disabled={state.loading}>
+                Force 100% AI Matches
               </AdminButton>
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.0, aiDefaultBehavior: 'AI_LIKE' })} className="bg-purple-600 hover:bg-purple-700" disabled={state.loading}>
-                Force 100% Assistant-Like
+              <AdminButton onClick={() => updateConfig({ aiMatchProbability: 0.0 })} className="bg-blue-600 hover:bg-blue-700" disabled={state.loading}>
+                Disable AI Matches
               </AdminButton>
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.5 })} className="bg-blue-600 hover:bg-blue-700" disabled={state.loading}>
+              <AdminButton onClick={() => updateConfig({ aiMatchProbability: 0.5 })} className="bg-purple-600 hover:bg-purple-700" disabled={state.loading}>
                 50/50 Mix
               </AdminButton>
               <AdminButton onClick={reset} className="bg-red-600 hover:bg-red-700" disabled={state.loading}>

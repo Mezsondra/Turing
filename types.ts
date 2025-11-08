@@ -10,4 +10,4 @@ export interface Message {
   text: string;
 }
 
-export type Language = 'en' | 'tr';
+export type Language = string; // Dynamic language support

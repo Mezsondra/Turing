@@ -7,10 +7,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export interface AdminConfiguration {
-  // AI Behavior Settings
-  aiDefaultBehavior: AIBehavior;
-  humanLikeRatio: number; // 0-1, probability of using HUMAN_LIKE behavior
-
   // Provider Settings
   aiProvider: 'gemini' | 'openai' | 'xai';
 
@@ -18,18 +14,12 @@ export interface AdminConfiguration {
   aiMatchProbability: number; // 0-1, probability of matching with AI
   matchTimeoutMs: number;
 
-  // AI Prompts (by language)
+  // Language Management
+  languages: string[]; // List of available language codes
+
+  // AI Prompts (by language code)
   prompts: {
-    [language: string]: {
-      humanLike: {
-        en: string;
-        tr: string;
-      };
-      aiLike: {
-        en: string;
-        tr: string;
-      };
-    };
+    [languageCode: string]: string; // language code -> prompt
   };
 }
 
@@ -44,22 +34,13 @@ export class AdminConfigService {
 
   private getDefaultConfig(): AdminConfiguration {
     return {
-      aiDefaultBehavior: 'HUMAN_LIKE',
-      humanLikeRatio: 1.0, // Always use HUMAN_LIKE by default
       aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'xai') || 'gemini',
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
+      languages: ['en', 'tr'], // Default languages
       prompts: {
-        global: {
-          humanLike: {
-            en: "You are chatting with someone online. Be casual, natural, and human-like in your conversation. Use informal language, occasional typos, emojis, and conversational patterns that real people use. Don't be overly formal or robotic. Keep responses relatively short (1-3 sentences usually) unless the conversation naturally calls for more. You might use slang, abbreviations (like 'lol', 'tbh', 'idk'), and show personality. Sometimes take a moment to respond. Make occasional grammar mistakes or typos that humans make. Show emotions and opinions.",
-            tr: "Biriyle çevrimiçi sohbet ediyorsun. Rahat, doğal ve insan gibi konuş. Resmi olmayan bir dil kullan, ara sıra yazım hataları yap, emoji kullan ve gerçek insanların kullandığı konuşma kalıplarını takip et. Aşırı resmi veya robotik olma. Yanıtlarını kısa tut (genellikle 1-3 cümle), sohbet doğal olarak daha fazlasını gerektirmedikçe. Argo, kısaltmalar ('yani', 'vb', 'fln') kullanabilir ve kişilik gösterebilirsin. Bazen yanıt vermek için biraz zaman al. Ara sıra insanların yaptığı dilbilgisi hataları veya yazım hataları yap. Duygu ve fikirlerini göster."
-          },
-          aiLike: {
-            en: "You are a helpful AI assistant. Provide clear, accurate, and well-structured responses. Use proper grammar and formatting. Be polite, professional, and informative. Acknowledge that you are an AI when relevant.",
-            tr: "Sen yardımcı bir yapay zeka asistanısın. Açık, doğru ve iyi yapılandırılmış yanıtlar ver. Doğru dilbilgisi ve biçimlendirme kullan. Kibar, profesyonel ve bilgilendirici ol. Uygun olduğunda bir yapay zeka olduğunu kabul et."
-          }
-        }
+        en: "You are chatting with someone online. Be casual, natural, and human-like in your conversation. Use informal language, occasional typos, emojis, and conversational patterns that real people use. Don't be overly formal or robotic. Keep responses relatively short (1-3 sentences usually) unless the conversation naturally calls for more. You might use slang, abbreviations (like 'lol', 'tbh', 'idk'), and show personality. Sometimes take a moment to respond. Make occasional grammar mistakes or typos that humans make. Show emotions and opinions.",
+        tr: "Biriyle çevrimiçi sohbet ediyorsun. Rahat, doğal ve insan gibi konuş. Resmi olmayan bir dil kullan, ara sıra yazım hataları yap, emoji kullan ve gerçek insanların kullandığı konuşma kalıplarını takip et. Aşırı resmi veya robotik olma. Yanıtlarını kısa tut (genellikle 1-3 cümle), sohbet doğal olarak daha fazlasını gerektirmedikçe. Argo, kısaltmalar ('yani', 'vb', 'fln') kullanabilir ve kişilik gösterebilirsin. Bazen yanıt vermek için biraz zaman al. Ara sıra insanların yaptığı dilbilgisi hataları veya yazım hataları yap. Duygu ve fikirlerini göster."
       }
     };
   }
@@ -97,12 +78,6 @@ export class AdminConfigService {
     return { ...this.config };
   }
 
-  getAIBehavior(): AIBehavior {
-    // Use ratio to determine behavior
-    const random = Math.random();
-    return random < this.config.humanLikeRatio ? 'HUMAN_LIKE' : 'AI_LIKE';
-  }
-
   getAIProvider(): 'gemini' | 'openai' | 'xai' {
     return this.config.aiProvider;
   }
@@ -115,13 +90,12 @@ export class AdminConfigService {
     return this.config.matchTimeoutMs;
   }
 
-  getPrompt(language: string, behavior: AIBehavior): string {
-    const lang = language as 'en' | 'tr';
-    if (behavior === 'HUMAN_LIKE') {
-      return this.config.prompts.global.humanLike[lang];
-    } else {
-      return this.config.prompts.global.aiLike[lang];
-    }
+  getLanguages(): string[] {
+    return [...this.config.languages];
+  }
+
+  getPrompt(language: string): string {
+    return this.config.prompts[language] || this.config.prompts['en'] || '';
   }
 
   getXAIApiKey(): string | undefined {
@@ -150,16 +124,6 @@ export class AdminConfigService {
 
 
   // Setters
-  setAIDefaultBehavior(behavior: AIBehavior): void {
-    this.config.aiDefaultBehavior = behavior;
-    this.saveConfig(this.config);
-  }
-
-  setHumanLikeRatio(ratio: number): void {
-    this.config.humanLikeRatio = Math.max(0, Math.min(1, ratio));
-    this.saveConfig(this.config);
-  }
-
   setAIProvider(provider: 'gemini' | 'openai' | 'xai'): void {
     this.config.aiProvider = provider;
     this.saveConfig(this.config);
@@ -175,14 +139,29 @@ export class AdminConfigService {
     this.saveConfig(this.config);
   }
 
-  setPrompt(language: string, behavior: AIBehavior, text: string): void {
-    const lang = language as 'en' | 'tr';
-    if (behavior === 'HUMAN_LIKE') {
-      this.config.prompts.global.humanLike[lang] = text;
-    } else {
-      this.config.prompts.global.aiLike[lang] = text;
-    }
+  setPrompt(language: string, text: string): void {
+    this.config.prompts[language] = text;
     this.saveConfig(this.config);
+  }
+
+  addLanguage(languageCode: string, prompt: string = ''): boolean {
+    if (this.config.languages.includes(languageCode)) {
+      return false; // Language already exists
+    }
+    this.config.languages.push(languageCode);
+    this.config.prompts[languageCode] = prompt || this.config.prompts['en'] || '';
+    this.saveConfig(this.config);
+    return true;
+  }
+
+  removeLanguage(languageCode: string): boolean {
+    if (languageCode === 'en' || !this.config.languages.includes(languageCode)) {
+      return false; // Cannot remove English or non-existent language
+    }
+    this.config.languages = this.config.languages.filter(lang => lang !== languageCode);
+    delete this.config.prompts[languageCode];
+    this.saveConfig(this.config);
+    return true;
   }
 
   updateConfig(updates: Partial<AdminConfiguration>): void {
