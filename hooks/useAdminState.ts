@@ -1,0 +1,162 @@
+import { useState } from 'react';
+import { AdminConfig } from '../../types';
+
+const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+
+interface AdminState {
+  isAuthenticated: boolean;
+  password: string;
+  config: AdminConfig | null;
+  loading: boolean;
+  error: string;
+  success: string;
+  authToken: string;
+}
+
+const useAdminState = () => {
+  const [state, setState] = useState<AdminState>({
+    isAuthenticated: false,
+    password: '',
+    config: null,
+    loading: false,
+    error: '',
+    success: '',
+    authToken: '',
+  });
+
+  const setPassword = (password: string) => {
+    setState(prevState => ({ ...prevState, password }));
+  };
+
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setState(prevState => ({ ...prevState, loading: true, error: '' }));
+
+    const token = `Bearer ${state.password}`;
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/config`, {
+        headers: { Authorization: token },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          isAuthenticated: true,
+          loading: false,
+          config: data.config,
+          authToken: token,
+          password: '', // Clear password after successful login
+        }));
+      } else {
+        setState(prevState => ({
+          ...prevState,
+          loading: false,
+          error: 'Invalid password',
+          password: '',
+        }));
+      }
+    } catch (err) {
+      setState(prevState => ({
+        ...prevState,
+        loading: false,
+        error: 'Failed to connect to server',
+      }));
+    }
+  };
+
+  const updateConfig = async (updates: Partial<AdminConfig>) => {
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
+
+    const newConfig = { ...state.config, ...updates };
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/config`, {
+        method: 'PUT',
+        headers: {
+          Authorization: state.authToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newConfig),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: 'Configuration updated successfully!',
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        setState(prevState => ({ ...prevState, error: 'Failed to update configuration', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
+  };
+
+  const reset = async () => {
+    if (!confirm('Are you sure you want to reset all settings to defaults?')) {
+      return;
+    }
+
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/reset`, {
+        method: 'POST',
+        headers: { Authorization: state.authToken },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: 'Configuration reset to defaults!',
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        setState(prevState => ({ ...prevState, error: 'Failed to reset configuration', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
+  };
+
+  const savePrompt = async (type: 'humanLike' | 'aiLike', lang: 'en' | 'tr', value: string) => {
+    if (!state.config) return;
+
+    const newConfig: AdminConfig = {
+      ...state.config,
+      prompts: {
+        ...state.config.prompts,
+        global: {
+          ...state.config.prompts.global,
+          [type]: {
+            ...state.config.prompts.global[type],
+            [lang]: value,
+          },
+        },
+      },
+    };
+    await updateConfig(newConfig);
+  };
+
+  return {
+    state,
+    actions: {
+      setPassword,
+    },
+    login,
+    reset,
+    savePrompt,
+    updateConfig,
+  };
+};
+
+export default useAdminState;

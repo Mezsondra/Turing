@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# SQLite
+turing.db-shm
+turing.db-wal
