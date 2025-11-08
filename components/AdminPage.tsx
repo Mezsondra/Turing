@@ -152,13 +152,14 @@ const AdminPage: React.FC = () => {
                   <select
                     value={state.config.aiProvider}
                     onChange={(e) =>
-                      updateConfig({ aiProvider: e.target.value as 'gemini' | 'openai' })
+                      updateConfig({ aiProvider: e.target.value as 'gemini' | 'openai' | 'xai' })
                     }
                     className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     disabled={state.loading}
                   >
                     <option value="gemini">Google Gemini</option>
                     <option value="openai">OpenAI</option>
+                    <option value="xai">XAI</option>
                   </select>
                 </LabeledInput>
               </AdminCard>
