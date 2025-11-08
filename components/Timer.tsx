@@ -7,7 +7,11 @@ interface TimerProps {
 }
 
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp }) => {
-  const [timeLeft, setTimeLeft] = useState(duration);
+  const [timeLeft, setTimeLeft] = useState(Math.max(0, Math.floor(duration)));
+
+  useEffect(() => {
+    setTimeLeft(Math.max(0, Math.floor(duration)));
+  }, [duration]);
 
   useEffect(() => {
     if (timeLeft <= 0) {
@@ -20,8 +24,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp }) => {
     }, 1000);
 
     return () => clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft]);
+  }, [timeLeft, onTimeUp]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

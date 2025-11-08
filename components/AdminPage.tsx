@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import useAdminState from '../hooks/useAdminState';
 import PromptEditor from './PromptEditor'; // Assuming PromptEditor is in the same directory
+import type { AdminConfig } from '../types';
 
 // Reusable components for the Admin Page UI
 const AdminCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -19,12 +20,31 @@ const LabeledInput: React.FC<{ label: string; description?: string; children: Re
   </div>
 );
 
-const AdminButton: React.FC<{ onClick: () => void; className: string; children: React.ReactNode; disabled?: boolean }> = ({ onClick, className, children, disabled }) => (
+const AdminButton: React.FC<{ onClick: () => void; className: string; children: React.ReactNode; disabled?: boolean; isLoading?: boolean }> = ({ onClick, className, children, disabled, isLoading }) => (
   <button onClick={onClick} className={`w-full font-bold py-2 px-4 rounded-md transition-all duration-300 ${className}`} disabled={disabled}>
-    {disabled && <ArrowPathIcon className="w-5 h-5 animate-spin mr-2 inline-block" />}
+    {isLoading && <ArrowPathIcon className="w-5 h-5 animate-spin mr-2 inline-block" />}
     {children}
   </button>
 );
+
+type ProviderKey = keyof AdminConfig['providers'];
+
+const createEmptyProviders = (): AdminConfig['providers'] => ({
+  gemini: { apiKey: '', model: '' },
+  openai: { apiKey: '', model: '' },
+  xai: { apiKey: '', model: '' },
+});
+
+const formatDuration = (seconds: number): string => {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  const minutePart = minutes > 0 ? `${minutes}m` : '';
+  const secondPart = `${remainingSeconds}s`;
+
+  return `${minutePart ? `${minutePart} ` : ''}${secondPart}`.trim();
+};
 
 const AdminPage: React.FC = () => {
   const {
@@ -35,6 +55,71 @@ const AdminPage: React.FC = () => {
     savePrompt,
     updateConfig,
   } = useAdminState();
+
+  const [providerDrafts, setProviderDrafts] = useState<AdminConfig['providers']>(
+    () => state.config?.providers ?? createEmptyProviders()
+  );
+  const [gameDurationDraft, setGameDurationDraft] = useState<number>(
+    () => state.config?.gameDurationSeconds ?? 60
+  );
+
+  useEffect(() => {
+    if (state.config?.providers) {
+      setProviderDrafts(state.config.providers);
+    }
+    if (typeof state.config?.gameDurationSeconds === 'number') {
+      setGameDurationDraft(state.config.gameDurationSeconds);
+    }
+  }, [state.config]);
+
+  const providerDefinitions = useMemo(
+    () => [
+      { key: 'gemini' as ProviderKey, label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
+      { key: 'openai' as ProviderKey, label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
+      { key: 'xai' as ProviderKey, label: 'XAI', envVar: 'XAI_API_KEY' },
+    ],
+    []
+  );
+
+  const handleProviderDraftChange = (
+    provider: ProviderKey,
+    field: 'apiKey' | 'model',
+    value: string
+  ) => {
+    setProviderDrafts(prev => ({
+      ...prev,
+      [provider]: {
+        ...prev[provider],
+        [field]: field === 'model' ? value : value.trimStart(),
+      },
+    }));
+  };
+
+  const handleProviderSave = (provider: ProviderKey) => {
+    if (!state.config) return;
+
+    const sanitized = {
+      apiKey: providerDrafts[provider]?.apiKey.trim() ?? '',
+      model: providerDrafts[provider]?.model.trim() ?? '',
+    };
+
+    updateConfig({
+      providers: {
+        ...state.config.providers,
+        [provider]: sanitized,
+      },
+    });
+  };
+
+  const handleGameDurationSave = () => {
+    const clamped = Math.max(30, Math.min(300, Math.round(gameDurationDraft)));
+    setGameDurationDraft(clamped);
+    updateConfig({ gameDurationSeconds: clamped });
+  };
+
+  const isGameDurationDirty = state.config
+    ? gameDurationDraft !== state.config.gameDurationSeconds
+    : false;
 
   if (!state.isAuthenticated) {
     return (
@@ -88,6 +173,8 @@ const AdminPage: React.FC = () => {
   }
 
   if (!state.config) return null;
+
+  const providerDraftSafe = providerDrafts ?? createEmptyProviders();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-black to-slate-800 p-4">
@@ -165,6 +252,57 @@ const AdminPage: React.FC = () => {
               </AdminCard>
             </div>
 
+            <AdminCard title="Provider Credentials">
+              <p className="text-sm text-slate-400">Update API keys and default models for each provider. Leave a field empty to fall back to the corresponding environment variable.</p>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-4">
+                {providerDefinitions.map(({ key, label, envVar }) => {
+                  const draft = providerDraftSafe[key];
+                  const current = state.config.providers[key];
+                  const isDirty =
+                    draft?.apiKey !== current?.apiKey || draft?.model !== current?.model;
+
+                  return (
+                    <div
+                      key={key}
+                      className="bg-slate-900/40 border border-slate-700 rounded-xl p-4 space-y-4"
+                    >
+                      <div>
+                        <h3 className="text-xl font-semibold text-cyan-200">{label}</h3>
+                        <p className="text-xs text-slate-400 mt-1">Fallback env var: <code className="text-slate-300">{envVar}</code></p>
+                      </div>
+                      <LabeledInput label="API Key" description="Stored in the server configuration file.">
+                        <input
+                          type="password"
+                          value={draft?.apiKey ?? ''}
+                          onChange={(e) => handleProviderDraftChange(key, 'apiKey', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          autoComplete="off"
+                          placeholder={`Paste ${label} API key`}
+                        />
+                      </LabeledInput>
+                      <LabeledInput label="Model" description="Default model for new AI matches.">
+                        <input
+                          type="text"
+                          value={draft?.model ?? ''}
+                          onChange={(e) => handleProviderDraftChange(key, 'model', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                          placeholder="e.g. gpt-4o-mini"
+                        />
+                      </LabeledInput>
+                      <AdminButton
+                        onClick={() => handleProviderSave(key)}
+                        className={`bg-cyan-600 hover:bg-cyan-700 ${(!isDirty || state.loading) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        disabled={!isDirty || state.loading}
+                        isLoading={state.loading}
+                      >
+                        Save {label} Settings
+                      </AdminButton>
+                    </div>
+                  );
+                })}
+              </div>
+            </AdminCard>
+
             <AdminCard title="AI Prompts">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PromptEditor
@@ -196,6 +334,47 @@ const AdminPage: React.FC = () => {
           </div>
 
           <div className="space-y-6">
+            <AdminCard title="Game Settings">
+              <LabeledInput
+                label={`Round Length: ${formatDuration(gameDurationDraft)}`}
+                description="Control how long each chat lasts. You can set between 30 seconds and 5 minutes."
+              >
+                <input
+                  type="range"
+                  min={30}
+                  max={300}
+                  step={15}
+                  value={gameDurationDraft}
+                  onChange={(e) => setGameDurationDraft(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                />
+              </LabeledInput>
+              <LabeledInput label="Round Length (seconds)">
+                <input
+                  type="number"
+                  min={30}
+                  max={300}
+                  step={5}
+                  value={gameDurationDraft}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isNaN(value)) {
+                      setGameDurationDraft(value);
+                    }
+                  }}
+                  className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+              </LabeledInput>
+              <AdminButton
+                onClick={handleGameDurationSave}
+                className={`bg-cyan-600 hover:bg-cyan-700 ${(!isGameDurationDirty || state.loading) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                disabled={!isGameDurationDirty || state.loading}
+                isLoading={state.loading}
+              >
+                Save Game Duration
+              </AdminButton>
+            </AdminCard>
+
             <AdminCard title="Matchmaking">
               <LabeledInput label={`AI Match Probability: ${Math.round(state.config.aiMatchProbability * 100)}%`} description="Probability of matching users with AI immediately">
                 <input
@@ -226,16 +405,16 @@ const AdminPage: React.FC = () => {
             </AdminCard>
 
             <AdminCard title="Quick Actions">
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 1.0, aiDefaultBehavior: 'HUMAN_LIKE' })} className="bg-green-600 hover:bg-green-700" disabled={state.loading}>
+              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 1.0, aiDefaultBehavior: 'HUMAN_LIKE' })} className="bg-green-600 hover:bg-green-700" disabled={state.loading} isLoading={state.loading}>
                 Force 100% Human-Like
               </AdminButton>
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.0, aiDefaultBehavior: 'AI_LIKE' })} className="bg-purple-600 hover:bg-purple-700" disabled={state.loading}>
+              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.0, aiDefaultBehavior: 'AI_LIKE' })} className="bg-purple-600 hover:bg-purple-700" disabled={state.loading} isLoading={state.loading}>
                 Force 100% Assistant-Like
               </AdminButton>
-              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.5 })} className="bg-blue-600 hover:bg-blue-700" disabled={state.loading}>
+              <AdminButton onClick={() => updateConfig({ humanLikeRatio: 0.5 })} className="bg-blue-600 hover:bg-blue-700" disabled={state.loading} isLoading={state.loading}>
                 50/50 Mix
               </AdminButton>
-              <AdminButton onClick={reset} className="bg-red-600 hover:bg-red-700" disabled={state.loading}>
+              <AdminButton onClick={reset} className="bg-red-600 hover:bg-red-700" disabled={state.loading} isLoading={state.loading}>
                 Reset to Defaults
               </AdminButton>
             </AdminCard>

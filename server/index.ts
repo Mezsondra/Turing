@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.js';
 import paymentRoutes from './routes/payment.js';
 import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
+import configRoutes from './routes/config.js';
 
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/config', configRoutes);
 
 // Create Socket.io server with CORS
 const io = new Server(httpServer, {

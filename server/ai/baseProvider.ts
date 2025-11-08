@@ -11,7 +11,7 @@ export interface AIProvider {
 }
 
 export interface AIProviderConfig {
-  provider: 'gemini' | 'openai' | 'anthropic';
+  provider: 'gemini' | 'openai' | 'xai' | 'anthropic';
   apiKey: string;
   model?: string;
 }
