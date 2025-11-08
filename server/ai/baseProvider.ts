@@ -15,3 +15,19 @@ export interface AIProviderConfig {
   apiKey: string;
   model?: string;
 }
+
+// ✅ Add this abstract class
+export abstract class BaseProvider implements AIProvider {
+  abstract name: string;
+
+  abstract createSession(matchId: string, language: Language, behavior: AIBehavior): Promise<void>;
+  abstract sendMessage(matchId: string, message: string): Promise<string>;
+  abstract initializeConversation(matchId: string): Promise<string>;
+  abstract deleteSession(matchId: string): void;
+  abstract hasSession(matchId: string): boolean;
+
+  // optional helper methods to override
+  protected getApiUrl?(): string;
+  protected getApiKey?(): Promise<string>;
+  protected getModel?(): string;
+}
