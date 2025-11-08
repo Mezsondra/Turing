@@ -1,6 +1,5 @@
 import { User, Match } from './types.js';
 import { aiService } from './aiService.js';
-import type { AIBehavior } from './ai/baseProvider.js';
 import { v4 as uuidv4 } from 'uuid';
 import { adminConfigService } from './adminConfig.js';
 
@@ -95,13 +94,10 @@ export class MatchmakingService {
 
     const matchId = uuidv4();
 
-    // Get AI behavior from admin configuration
-    const behavior: AIBehavior = adminConfigService.getAIBehavior();
+    console.log(`Matching user ${user.id} with AI (language: ${user.language})`);
 
-    console.log(`AI will act as: ${behavior} for match ${matchId}`);
-
-    // Create AI session
-    aiService.createSession(matchId, user.language, behavior);
+    // Create AI session (AI always acts human-like)
+    aiService.createSession(matchId, user.language);
 
     const match: Match = {
       id: matchId,

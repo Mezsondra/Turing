@@ -49,4 +49,64 @@ router.post('/reset', requireAdmin, (req: Request, res: Response) => {
   }
 });
 
+// Language Management Endpoints
+
+// Add a new language
+router.post('/languages', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { languageCode, prompt } = req.body;
+
+    if (!languageCode || typeof languageCode !== 'string') {
+      return res.status(400).json({ success: false, error: 'Language code is required' });
+    }
+
+    const success = adminConfigService.addLanguage(languageCode, prompt || '');
+
+    if (!success) {
+      return res.status(400).json({ success: false, error: 'Language already exists' });
+    }
+
+    res.json({ success: true, config: adminConfigService.getConfig() });
+  } catch (error) {
+    console.error('Error adding language:', error);
+    res.status(500).json({ success: false, error: 'Failed to add language' });
+  }
+});
+
+// Remove a language
+router.delete('/languages/:languageCode', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { languageCode } = req.params;
+
+    const success = adminConfigService.removeLanguage(languageCode);
+
+    if (!success) {
+      return res.status(400).json({ success: false, error: 'Cannot remove this language (it may be English or non-existent)' });
+    }
+
+    res.json({ success: true, config: adminConfigService.getConfig() });
+  } catch (error) {
+    console.error('Error removing language:', error);
+    res.status(500).json({ success: false, error: 'Failed to remove language' });
+  }
+});
+
+// Update prompt for a specific language
+router.put('/prompts/:languageCode', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { languageCode } = req.params;
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt text is required' });
+    }
+
+    adminConfigService.setPrompt(languageCode, prompt);
+    res.json({ success: true, config: adminConfigService.getConfig() });
+  } catch (error) {
+    console.error('Error updating prompt:', error);
+    res.status(500).json({ success: false, error: 'Failed to update prompt' });
+  }
+});
+
 export default router;
