@@ -29,9 +29,7 @@ export class MatchmakingService {
 
   private tryMatchUser(user: User): void {
     // Check if user should be matched with AI immediately (random chance)
-    const shouldMatchWithAI = Math.random() < this.AI_MATCH_PROBABILITY;
-
-    if (shouldMatchWithAI) {
+    if (Math.random() < this.AI_MATCH_PROBABILITY) {
       console.log(`User ${user.id} will be matched with AI (random selection)`);
       this.matchWithAI(user);
       return;
@@ -50,7 +48,7 @@ export class MatchmakingService {
         u => u.id !== user.id && u.id !== otherUser.id
       );
 
-      // Clear any pending timeouts
+      // Clear any pending timeouts for both users
       this.clearMatchTimeout(user.id);
       this.clearMatchTimeout(otherUser.id);
 
@@ -61,7 +59,6 @@ export class MatchmakingService {
       // Set timeout to match with AI if no human found
       console.log(`User ${user.id} waiting for match, will match with AI in ${this.MATCH_TIMEOUT_MS}ms if no human found`);
       const timeout = setTimeout(() => {
-        // Check if user is still in queue
         const stillWaiting = this.waitingQueue.some(u => u.id === user.id);
         if (stillWaiting) {
           console.log(`Timeout reached for user ${user.id}, matching with AI`);

@@ -12,7 +12,7 @@ export interface AdminConfiguration {
   humanLikeRatio: number; // 0-1, probability of using HUMAN_LIKE behavior
 
   // Provider Settings
-  aiProvider: 'gemini' | 'openai';
+  aiProvider: 'gemini' | 'openai' | 'xai';
 
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
@@ -46,7 +46,7 @@ export class AdminConfigService {
     return {
       aiDefaultBehavior: 'HUMAN_LIKE',
       humanLikeRatio: 1.0, // Always use HUMAN_LIKE by default
-      aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai') || 'gemini',
+      aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'xai') || 'gemini',
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
       prompts: {
@@ -103,7 +103,7 @@ export class AdminConfigService {
     return random < this.config.humanLikeRatio ? 'HUMAN_LIKE' : 'AI_LIKE';
   }
 
-  getAIProvider(): 'gemini' | 'openai' {
+  getAIProvider(): 'gemini' | 'openai' | 'xai' {
     return this.config.aiProvider;
   }
 
@@ -124,6 +124,14 @@ export class AdminConfigService {
     }
   }
 
+  getXAIApiKey(): string | undefined {
+    return process.env.XAI_API_KEY;
+  }
+
+  getXAIModel(): string {
+    return process.env.XAI_MODEL || 'grok-1.5-flash';
+  }
+
   // Setters
   setAIDefaultBehavior(behavior: AIBehavior): void {
     this.config.aiDefaultBehavior = behavior;
@@ -135,7 +143,7 @@ export class AdminConfigService {
     this.saveConfig(this.config);
   }
 
-  setAIProvider(provider: 'gemini' | 'openai'): void {
+  setAIProvider(provider: 'gemini' | 'openai' | 'xai'): void {
     this.config.aiProvider = provider;
     this.saveConfig(this.config);
   }

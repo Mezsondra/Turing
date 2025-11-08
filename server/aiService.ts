@@ -1,5 +1,23 @@
 import { AIProvider, AIBehavior, Language } from './ai/baseProvider.js';
-import { AIProviderFactory } from './ai/providerFactory.js';
+import { geminiProvider } from './ai/geminiProvider.js';
+import { openaiProvider } from './ai/openaiProvider.js';
+import { xaiProvider } from './ai/xaiProvider.js';
+import { adminConfigService } from './adminConfig.js';
+
+export class AIProviderFactory {
+  static getProviderFromEnv(): AIProvider {
+    const providerType = adminConfigService.getAIProvider();
+    switch (providerType) {
+      case 'openai':
+        return openaiProvider;
+      case 'xai':
+        return xaiProvider;
+      case 'gemini':
+      default:
+        return geminiProvider;
+    }
+  }
+}
 
 export class AIService {
   private provider: AIProvider;
