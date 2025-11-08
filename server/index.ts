@@ -84,13 +84,20 @@ io.on('connection', (socket: Socket) => {
           try {
             const initialMessage = await aiService.initializeConversation(match.id);
 
-            // Simulate typing delay
+            const thinkingDelay = 800 + Math.random() * 1200;
+            const typingDuration = Math.min(4500, Math.max(1200, initialMessage.length * 30));
+
             setTimeout(() => {
-              socket.emit('message', {
-                text: initialMessage,
-                fromAI: true,
-              });
-            }, 1000 + Math.random() * 1000);
+              socket.emit('partner-typing', { isTyping: true });
+
+              setTimeout(() => {
+                socket.emit('message', {
+                  text: initialMessage,
+                  fromAI: true,
+                });
+                socket.emit('partner-typing', { isTyping: false });
+              }, typingDuration);
+            }, thinkingDelay);
           } catch (error) {
             console.error('Error initializing AI conversation:', error);
             socket.emit('error', { message: 'Failed to initialize chat' });
@@ -144,28 +151,31 @@ io.on('connection', (socket: Socket) => {
       if (match.isAiMatch) {
         // Send to AI and get response
         try {
-          // Simulate thinking delay
-          const thinkingDelay = 400 + Math.random() * 800;
+          // Simulate thinking delay before AI starts typing
+          const thinkingDelay = 800 + Math.random() * 1200;
 
           setTimeout(async () => {
+            socket.emit('partner-typing', { isTyping: true });
             try {
               const aiResponse = await aiService.sendMessage(match.id, text);
+              const typingDuration = Math.min(4500, Math.max(1200, aiResponse.length * 30));
 
-              // Simulate typing delay before sending
-              const typingDelay = 500 + Math.random() * 1000;
               setTimeout(() => {
                 socket.emit('message', {
                   text: aiResponse,
                   fromAI: true,
                 });
-              }, typingDelay);
+                socket.emit('partner-typing', { isTyping: false });
+              }, typingDuration);
             } catch (error) {
               console.error('Error getting AI response:', error);
+              socket.emit('partner-typing', { isTyping: false });
               socket.emit('error', { message: 'Failed to get response' });
             }
           }, thinkingDelay);
         } catch (error) {
           console.error('Error processing AI message:', error);
+          socket.emit('partner-typing', { isTyping: false });
           socket.emit('error', { message: 'Failed to send message' });
         }
       } else {

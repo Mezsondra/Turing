@@ -29,6 +29,7 @@ interface GuessResultEvent {
 export class SocketService {
   private socket: Socket | null = null;
   private serverUrl: string;
+  private pendingGuessResultHandlers: Array<(data: GuessResultEvent) => void> = [];
 
   constructor() {
     this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
@@ -42,6 +43,11 @@ export class SocketService {
 
       this.socket.on('connect', () => {
         console.log('Connected to server:', this.socket?.id);
+
+        // Register any guess result handlers that were added before connection
+        this.pendingGuessResultHandlers.forEach((handler) => {
+          this.socket?.on('guess-result', handler);
+        });
         resolve();
       });
 
@@ -130,9 +136,21 @@ export class SocketService {
     this.socket.on('error', callback);
   }
 
-  onGuessResult(callback: (data: GuessResultEvent) => void): void {
-    if (!this.socket) return;
-    this.socket.on('guess-result', callback);
+  onGuessResult(callback: (data: GuessResultEvent) => void): () => void {
+    if (this.socket) {
+      this.socket.on('guess-result', callback);
+    } else {
+      this.pendingGuessResultHandlers.push(callback);
+    }
+
+    return () => {
+      if (this.socket) {
+        this.socket.off('guess-result', callback);
+      }
+      this.pendingGuessResultHandlers = this.pendingGuessResultHandlers.filter(
+        (handler) => handler !== callback
+      );
+    };
   }
 
   removeAllListeners(): void {

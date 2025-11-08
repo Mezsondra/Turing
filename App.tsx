@@ -22,22 +22,45 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Set up listener for guess results
-    socketService.onGuessResult((result) => {
+    const unsubscribe = socketService.onGuessResult((result) => {
       if (result.error) {
         console.error('Error submitting guess:', result.error);
         return;
       }
 
       setLastGuessCorrect(result.wasCorrect);
-      setScoreData({
-        score: result.score,
-        gamesPlayed: result.gamesPlayed,
-        gamesWon: result.gamesWon,
-        gamesLost: result.gamesLost
-      });
-      setScore(result.score);
+
+      const hasServerStats =
+        result.score !== 0 ||
+        result.gamesPlayed > 0 ||
+        result.gamesWon > 0 ||
+        result.gamesLost > 0;
+      const pointsDelta = result.wasCorrect ? 10 : -5;
+
+      setScore((prevScore) => (hasServerStats ? result.score : prevScore + pointsDelta));
+
+      setScoreData((prev) =>
+        hasServerStats
+          ? {
+              score: result.score,
+              gamesPlayed: result.gamesPlayed,
+              gamesWon: result.gamesWon,
+              gamesLost: result.gamesLost,
+            }
+          : {
+              score: prev.score + pointsDelta,
+              gamesPlayed: prev.gamesPlayed + 1,
+              gamesWon: prev.gamesWon + (result.wasCorrect ? 1 : 0),
+              gamesLost: prev.gamesLost + (result.wasCorrect ? 0 : 1),
+            }
+      );
+
       setGameState(GameState.RESULT);
     });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleStartGame = () => {
