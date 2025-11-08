@@ -150,3 +150,12 @@ export class OpenAIProvider implements AIProvider {
     return this.sessions.has(matchId);
   }
 }
+
+import { adminConfigService } from '../adminConfig.js';
+
+// Create and export a singleton instance
+const apiKey = adminConfigService.getOpenAIApiKey();
+const model = adminConfigService.getOpenAIModel();
+
+export const openaiProvider = new OpenAIProvider(apiKey, model);
+
