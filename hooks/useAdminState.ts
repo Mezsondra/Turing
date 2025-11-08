@@ -2,8 +2,17 @@ import { useState } from 'react';
 
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
+type ProviderKey = 'gemini' | 'openai' | 'xai';
+
+interface ProviderConfig {
+  apiKey: string;
+  model: string;
+  apiBaseUrl?: string;
+}
+
 interface AdminConfig {
-  aiProvider: 'gemini' | 'openai' | 'xai';
+  aiProvider: ProviderKey;
+  aiProviders: Record<ProviderKey, ProviderConfig>;
   aiMatchProbability: number;
   matchTimeoutMs: number;
   languages: string[];
@@ -11,6 +20,12 @@ interface AdminConfig {
     [languageCode: string]: string;
   };
 }
+
+type AdminConfigUpdate = Partial<Omit<AdminConfig, 'aiProviders' | 'prompts' | 'languages'>> & {
+  aiProviders?: Partial<Record<ProviderKey, Partial<ProviderConfig>>>;
+  prompts?: Partial<AdminConfig['prompts']>;
+  languages?: string[];
+};
 
 interface AdminState {
   isAuthenticated: boolean;
@@ -75,10 +90,48 @@ const useAdminState = () => {
     }
   };
 
-  const updateConfig = async (updates: Partial<AdminConfig>) => {
+  const mergeConfig = (current: AdminConfig, updates: AdminConfigUpdate): AdminConfig => {
+    const mergedProviders = { ...current.aiProviders } as Record<ProviderKey, ProviderConfig>;
+
+    if (updates.aiProviders) {
+      (Object.keys(updates.aiProviders) as ProviderKey[]).forEach(provider => {
+        const update = updates.aiProviders?.[provider];
+        if (update) {
+          mergedProviders[provider] = {
+            ...current.aiProviders[provider],
+            ...update,
+          };
+        }
+      });
+    }
+
+    return {
+      ...current,
+      ...updates,
+      aiProviders: mergedProviders,
+      prompts: {
+        ...current.prompts,
+        ...(updates.prompts || {}),
+      },
+      languages: updates.languages || current.languages,
+    };
+  };
+
+  const updateConfig = async (updates: AdminConfigUpdate) => {
     setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
 
-    const newConfig = { ...state.config, ...updates };
+    if (!state.config) {
+      setState(prevState => ({ ...prevState, loading: false }));
+      return;
+    }
+
+    const previousConfig = state.config;
+    const newConfig = mergeConfig(state.config, updates);
+
+    setState(prevState => ({
+      ...prevState,
+      config: newConfig,
+    }));
 
     try {
       const response = await fetch(`${API_URL}/api/admin/config`, {
@@ -87,7 +140,7 @@ const useAdminState = () => {
           Authorization: state.authToken,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newConfig),
+        body: JSON.stringify(updates),
       });
 
       if (response.ok) {
@@ -100,10 +153,20 @@ const useAdminState = () => {
         }));
         setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
       } else {
-        setState(prevState => ({ ...prevState, error: 'Failed to update configuration', loading: false }));
+        setState(prevState => ({
+          ...prevState,
+          error: 'Failed to update configuration',
+          loading: false,
+          config: previousConfig,
+        }));
       }
     } catch (err) {
-      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+      setState(prevState => ({
+        ...prevState,
+        error: 'Failed to connect to server',
+        loading: false,
+        config: previousConfig,
+      }));
     }
   };
 
