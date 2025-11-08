@@ -3,6 +3,7 @@ import WelcomeScreen from './components/WelcomeScreen';
 import ChatScreen from './components/ChatScreen';
 import GuessScreen from './components/GuessScreen';
 import ResultScreen from './components/ResultScreen';
+import AdminPage from './components/AdminPage';
 import { GameState } from './types';
 import { socketService } from './services/socketService';
 
@@ -90,6 +91,13 @@ const App: React.FC = () => {
         return <WelcomeScreen onStartGame={handleStartGame} />;
     }
   };
+
+  // Check if we're on the admin page
+  const isAdminPage = window.location.pathname === '/admin';
+
+  if (isAdminPage) {
+    return <AdminPage />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-900 font-sans">

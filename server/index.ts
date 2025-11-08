@@ -11,6 +11,7 @@ import { User } from './types.js';
 import authRoutes from './routes/auth.js';
 import paymentRoutes from './routes/payment.js';
 import gameRoutes from './routes/game.js';
+import adminRoutes from './routes/admin.js';
 
 
 const app = express();
@@ -32,6 +33,7 @@ app.use((req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Create Socket.io server with CORS
 const io = new Server(httpServer, {
