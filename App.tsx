@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import WelcomeScreen from './components/WelcomeScreen';
 import ChatScreen from './components/ChatScreen';
 import GuessScreen from './components/GuessScreen';
@@ -13,6 +13,7 @@ const App: React.FC = () => {
   const [lastGuessCorrect, setLastGuessCorrect] = useState(false);
   const [partnerType, setPartnerType] = useState<'HUMAN' | 'AI'>('AI');
   const [matchId, setMatchId] = useState<string>('');
+  const pendingGuessRef = useRef<'HUMAN' | 'AI' | null>(null);
   const [scoreData, setScoreData] = useState({
     score: 0,
     gamesPlayed: 0,
@@ -20,14 +21,36 @@ const App: React.FC = () => {
     gamesLost: 0
   });
 
+  const applyLocalGuessResult = (guess: 'HUMAN' | 'AI') => {
+    pendingGuessRef.current = null;
+    const wasCorrect = guess === partnerType;
+    const pointsDelta = wasCorrect ? 10 : -5;
+
+    setLastGuessCorrect(wasCorrect);
+    setScore((prevScore) => prevScore + pointsDelta);
+    setScoreData((prev) => ({
+      score: prev.score + pointsDelta,
+      gamesPlayed: prev.gamesPlayed + 1,
+      gamesWon: prev.gamesWon + (wasCorrect ? 1 : 0),
+      gamesLost: prev.gamesLost + (wasCorrect ? 0 : 1),
+    }));
+    setGameState(GameState.RESULT);
+  };
+
   useEffect(() => {
     // Set up listener for guess results
     const unsubscribe = socketService.onGuessResult((result) => {
       if (result.error) {
         console.error('Error submitting guess:', result.error);
+        const fallbackGuess = pendingGuessRef.current;
+        pendingGuessRef.current = null;
+        if (fallbackGuess) {
+          applyLocalGuessResult(fallbackGuess);
+        }
         return;
       }
 
+      pendingGuessRef.current = null;
       setLastGuessCorrect(result.wasCorrect);
 
       const hasServerStats =
@@ -76,16 +99,17 @@ const App: React.FC = () => {
 
   const handleGuess = (guess: 'HUMAN' | 'AI') => {
     // Submit guess via socket and wait for result
+    pendingGuessRef.current = guess;
     if (matchId) {
-      socketService.submitGuess(matchId, guess);
+      try {
+        socketService.submitGuess(matchId, guess);
+      } catch (error) {
+        console.error('Failed to submit guess via socket:', error);
+        applyLocalGuessResult(guess);
+      }
     } else {
       // Fallback for local scoring if no matchId
-      const wasCorrect = guess === partnerType;
-      setLastGuessCorrect(wasCorrect);
-      if (wasCorrect) {
-        setScore(prevScore => prevScore + 1);
-      }
-      setGameState(GameState.RESULT);
+      applyLocalGuessResult(guess);
     }
   };
 
