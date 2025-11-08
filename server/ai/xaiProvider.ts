@@ -1,4 +1,4 @@
-import { BaseProvider, AIBehavior } from './baseProvider.js';
+import { BaseProvider, AIBehavior } from './baseProvider.ts';
 import { adminConfigService } from '../adminConfig.js';
 
 class XAIProvider extends BaseProvider {
