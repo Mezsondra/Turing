@@ -145,13 +145,33 @@ const AdminPage: React.FC = () => {
   };
 
   const savePrompt = async () => {
-    if (!editingPrompt) return;
+    if (!editingPrompt || !config) return;
 
-    const updates = { ...config! };
-    updates.prompts.global[editingPrompt.type][editingPrompt.lang] = editingPrompt.value;
+    const { type, lang, value } = editingPrompt;
+
+    const updates: AdminConfig = {
+      ...config,
+      prompts: {
+        ...config.prompts,
+        global: {
+          ...config.prompts.global,
+          [type]: {
+            ...config.prompts.global[type],
+            [lang]: value,
+          },
+        },
+      },
+    };
 
     await updateConfig(updates);
     setEditingPrompt(null);
+  };
+
+  const renderPromptPreview = (text: string) => {
+    if (text.length <= 100) {
+      return text;
+    }
+    return `${text.substring(0, 100)}...`;
   };
 
   if (!isAuthenticated) {
@@ -427,7 +447,7 @@ const AdminPage: React.FC = () => {
                   ) : (
                     <div>
                       <p className="text-sm text-slate-400 bg-slate-900 p-3 rounded-md">
-                        {config.prompts.global.humanLike.en.substring(0, 100)}...
+                        {renderPromptPreview(config.prompts.global.humanLike.en)}
                       </p>
                       <button
                         onClick={() =>
@@ -474,7 +494,7 @@ const AdminPage: React.FC = () => {
                   ) : (
                     <div>
                       <p className="text-sm text-slate-400 bg-slate-900 p-3 rounded-md">
-                        {config.prompts.global.humanLike.tr.substring(0, 100)}...
+                        {renderPromptPreview(config.prompts.global.humanLike.tr)}
                       </p>
                       <button
                         onClick={() =>
@@ -528,7 +548,7 @@ const AdminPage: React.FC = () => {
                   ) : (
                     <div>
                       <p className="text-sm text-slate-400 bg-slate-900 p-3 rounded-md">
-                        {config.prompts.global.aiLike.en.substring(0, 100)}...
+                        {renderPromptPreview(config.prompts.global.aiLike.en)}
                       </p>
                       <button
                         onClick={() =>
@@ -575,7 +595,7 @@ const AdminPage: React.FC = () => {
                   ) : (
                     <div>
                       <p className="text-sm text-slate-400 bg-slate-900 p-3 rounded-md">
-                        {config.prompts.global.aiLike.tr.substring(0, 100)}...
+                        {renderPromptPreview(config.prompts.global.aiLike.tr)}
                       </p>
                       <button
                         onClick={() =>
