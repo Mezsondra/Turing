@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface ProviderConfiguration {
+  apiKey: string;
+  model: string;
+}
+
 export interface AdminConfiguration {
   // AI Behavior Settings
   aiDefaultBehavior: AIBehavior;
@@ -13,10 +18,18 @@ export interface AdminConfiguration {
 
   // Provider Settings
   aiProvider: 'gemini' | 'openai' | 'xai';
+  providers: {
+    gemini: ProviderConfiguration;
+    openai: ProviderConfiguration;
+    xai: ProviderConfiguration;
+  };
 
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
   matchTimeoutMs: number;
+
+  // Game Settings
+  gameDurationSeconds: number;
 
   // AI Prompts (by language)
   prompts: {
@@ -42,13 +55,60 @@ export class AdminConfigService {
     this.config = this.loadConfig();
   }
 
+  private mergeConfigs<T extends Record<string, any>>(base: T, updates: Partial<T>): T {
+    const result: Record<string, any> = Array.isArray(base) ? [...base] : { ...base };
+
+    if (!updates) {
+      return result as T;
+    }
+
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined || value === null) {
+        result[key] = value;
+        continue;
+      }
+
+      const existing = (base as Record<string, any>)[key];
+
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        result[key] = this.mergeConfigs(
+          typeof existing === 'object' && existing ? existing : {},
+          value as Record<string, any>
+        );
+      } else {
+        result[key] = value;
+      }
+    }
+
+    return result as T;
+  }
+
   private getDefaultConfig(): AdminConfiguration {
+    const defaultGeminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const defaultOpenAIModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    const defaultXAIModel = process.env.XAI_MODEL || 'grok-1.5-flash';
+
     return {
       aiDefaultBehavior: 'HUMAN_LIKE',
       humanLikeRatio: 1.0, // Always use HUMAN_LIKE by default
       aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'xai') || 'gemini',
+      providers: {
+        gemini: {
+          apiKey: process.env.GEMINI_API_KEY || '',
+          model: defaultGeminiModel,
+        },
+        openai: {
+          apiKey: process.env.OPENAI_API_KEY || '',
+          model: defaultOpenAIModel,
+        },
+        xai: {
+          apiKey: process.env.XAI_API_KEY || '',
+          model: defaultXAIModel,
+        },
+      },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
+      gameDurationSeconds: 60,
       prompts: {
         global: {
           humanLike: {
@@ -71,7 +131,7 @@ export class AdminConfigService {
         const loadedConfig = JSON.parse(data);
 
         // Merge with defaults to ensure all fields exist
-        return { ...this.getDefaultConfig(), ...loadedConfig };
+        return this.mergeConfigs(this.getDefaultConfig(), loadedConfig);
       }
     } catch (error) {
       console.error('Error loading admin config:', error);
@@ -94,7 +154,12 @@ export class AdminConfigService {
 
   // Getters
   getConfig(): AdminConfiguration {
-    return { ...this.config };
+    return JSON.parse(JSON.stringify(this.config));
+  }
+
+  getPublicConfig(): Pick<AdminConfiguration, 'gameDurationSeconds' | 'matchTimeoutMs' | 'aiProvider'> {
+    const { gameDurationSeconds, matchTimeoutMs, aiProvider } = this.config;
+    return { gameDurationSeconds, matchTimeoutMs, aiProvider };
   }
 
   getAIBehavior(): AIBehavior {
@@ -115,6 +180,14 @@ export class AdminConfigService {
     return this.config.matchTimeoutMs;
   }
 
+  getGameDurationSeconds(): number {
+    return this.config.gameDurationSeconds;
+  }
+
+  getProviderSettings(provider: 'gemini' | 'openai' | 'xai'): ProviderConfiguration {
+    return { ...this.config.providers[provider] };
+  }
+
   getPrompt(language: string, behavior: AIBehavior): string {
     const lang = language as 'en' | 'tr';
     if (behavior === 'HUMAN_LIKE') {
@@ -122,14 +195,6 @@ export class AdminConfigService {
     } else {
       return this.config.prompts.global.aiLike[lang];
     }
-  }
-
-  getXAIApiKey(): string | undefined {
-    return process.env.XAI_API_KEY;
-  }
-
-  getXAIModel(): string {
-    return process.env.XAI_MODEL || 'grok-1.5-flash';
   }
 
   // Setters
@@ -158,6 +223,12 @@ export class AdminConfigService {
     this.saveConfig(this.config);
   }
 
+  setGameDurationSeconds(durationSeconds: number): void {
+    const clamped = Math.max(30, Math.min(300, durationSeconds));
+    this.config.gameDurationSeconds = clamped;
+    this.saveConfig(this.config);
+  }
+
   setPrompt(language: string, behavior: AIBehavior, text: string): void {
     const lang = language as 'en' | 'tr';
     if (behavior === 'HUMAN_LIKE') {
@@ -169,7 +240,13 @@ export class AdminConfigService {
   }
 
   updateConfig(updates: Partial<AdminConfiguration>): void {
-    this.config = { ...this.config, ...updates };
+    this.config = this.mergeConfigs(this.config, updates);
+
+    if (updates.gameDurationSeconds !== undefined) {
+      this.setGameDurationSeconds(updates.gameDurationSeconds);
+      return;
+    }
+
     this.saveConfig(this.config);
   }
 

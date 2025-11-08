@@ -2,8 +2,23 @@
   "aiDefaultBehavior": "HUMAN_LIKE",
   "humanLikeRatio": 1,
   "aiProvider": "gemini",
+  "providers": {
+    "gemini": {
+      "apiKey": "",
+      "model": "gemini-2.5-flash"
+    },
+    "openai": {
+      "apiKey": "",
+      "model": "gpt-4o-mini"
+    },
+    "xai": {
+      "apiKey": "",
+      "model": "grok-1.5-flash"
+    }
+  },
   "aiMatchProbability": 0.5,
   "matchTimeoutMs": 10000,
+  "gameDurationSeconds": 60,
   "prompts": {
     "global": {
       "humanLike": {

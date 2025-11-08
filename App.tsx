@@ -6,6 +6,7 @@ import ResultScreen from './components/ResultScreen';
 import AdminPage from './components/AdminPage';
 import { GameState } from './types';
 import { socketService } from './services/socketService';
+import { fetchPublicConfig } from './services/configService';
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(GameState.WELCOME);
@@ -20,6 +21,7 @@ const App: React.FC = () => {
     gamesWon: 0,
     gamesLost: 0
   });
+  const [gameDurationSeconds, setGameDurationSeconds] = useState<number>(60);
 
   const applyLocalGuessResult = (guess: 'HUMAN' | 'AI') => {
     pendingGuessRef.current = null;
@@ -38,6 +40,20 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const config = await fetchPublicConfig();
+        if (config?.gameDurationSeconds) {
+          const clamped = Math.max(30, Math.min(300, Math.round(config.gameDurationSeconds)));
+          setGameDurationSeconds(clamped);
+        }
+      } catch (error) {
+        console.error('Failed to load public configuration:', error);
+      }
+    };
+
+    loadConfig();
+
     // Set up listener for guess results
     const unsubscribe = socketService.onGuessResult((result) => {
       if (result.error) {
@@ -120,7 +136,12 @@ const App: React.FC = () => {
   const renderGameState = () => {
     switch (gameState) {
       case GameState.CHATTING:
-        return <ChatScreen key={Date.now()} onTimeUp={handleTimeUp} score={score} />;
+        return <ChatScreen
+          key={Date.now()}
+          onTimeUp={handleTimeUp}
+          score={score}
+          gameDurationSeconds={gameDurationSeconds}
+        />;
       case GameState.GUESSING:
         return <GuessScreen onGuess={handleGuess} />;
       case GameState.RESULT:

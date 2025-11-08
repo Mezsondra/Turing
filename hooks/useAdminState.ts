@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AdminConfig } from '../../types';
+import { AdminConfig } from '../types';
 
 const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
 
@@ -67,9 +67,16 @@ const useAdminState = () => {
   };
 
   const updateConfig = async (updates: Partial<AdminConfig>) => {
+    if (!state.config) {
+      return;
+    }
+
     setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
 
-    const newConfig = { ...state.config, ...updates };
+    const newConfig: AdminConfig = {
+      ...state.config,
+      ...updates,
+    };
 
     try {
       const response = await fetch(`${API_URL}/api/admin/config`, {

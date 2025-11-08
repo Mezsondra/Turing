@@ -11,9 +11,10 @@ import { socketService } from '../services/socketService';
 interface ChatScreenProps {
   onTimeUp: (actualPartner: 'HUMAN' | 'AI', matchId: string) => void;
   score: number;
+  gameDurationSeconds: number;
 }
 
-const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
+const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, gameDurationSeconds }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
@@ -216,7 +217,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     <div className="flex flex-col h-screen bg-slate-800">
       <header className="bg-slate-900/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-slate-700 sticky top-0">
         <h2 className="text-xl font-bold text-slate-200">{t('score')}: <span className="text-cyan-400">{score}</span></h2>
-        <Timer duration={60} onTimeUp={handleTimeUp} />
+        <Timer duration={gameDurationSeconds} onTimeUp={handleTimeUp} />
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
