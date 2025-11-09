@@ -41,6 +41,7 @@ const AdminPage: React.FC = () => {
     login,
     reset,
     savePrompt,
+    saveInitialPrompt,
     addLanguage,
     removeLanguage,
     updateConfig,
@@ -350,6 +351,21 @@ const AdminPage: React.FC = () => {
                 ))}
               </div>
             </AdminCard>
+
+            <AdminCard title="Initial Conversation Prompts">
+              <p className="text-slate-400 text-sm mb-4">Control how the AI begins a new chat for each language</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {state.config.languages.map((lang) => (
+                  <PromptEditor
+                    key={lang}
+                    title={`Initial Prompt (${lang.toUpperCase()})`}
+                    initialValue={state.config.initialPrompts[lang] || ''}
+                    onSave={(value) => saveInitialPrompt(lang, value)}
+                    loading={state.loading}
+                  />
+                ))}
+              </div>
+            </AdminCard>
           </div>
 
           <div className="space-y-6">
@@ -376,6 +392,20 @@ const AdminPage: React.FC = () => {
                   onChange={(e) =>
                     updateConfig({ matchTimeoutMs: parseInt(e.target.value) })
                   }
+                  className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  disabled={state.loading}
+                />
+              </LabeledInput>
+              <LabeledInput label="Round Duration (seconds)" description="How long each conversation lasts before the reveal">
+                <input
+                  type="number"
+                  min="10"
+                  step="5"
+                  value={state.config.conversationDurationSeconds}
+                  onChange={(e) => {
+                    const nextValue = Math.max(10, parseInt(e.target.value) || 0);
+                    updateConfig({ conversationDurationSeconds: nextValue });
+                  }}
                   className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   disabled={state.loading}
                 />

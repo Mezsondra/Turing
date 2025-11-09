@@ -15,8 +15,12 @@ interface AdminConfig {
   aiProviders: Record<ProviderKey, ProviderConfig>;
   aiMatchProbability: number;
   matchTimeoutMs: number;
+  conversationDurationSeconds: number;
   languages: string[];
   prompts: {
+    [languageCode: string]: string;
+  };
+  initialPrompts: {
     [languageCode: string]: string;
   };
 }
@@ -24,6 +28,7 @@ interface AdminConfig {
 type AdminConfigUpdate = Partial<Omit<AdminConfig, 'aiProviders' | 'prompts' | 'languages'>> & {
   aiProviders?: Partial<Record<ProviderKey, Partial<ProviderConfig>>>;
   prompts?: Partial<AdminConfig['prompts']>;
+  initialPrompts?: Partial<AdminConfig['initialPrompts']>;
   languages?: string[];
 };
 
@@ -112,6 +117,10 @@ const useAdminState = () => {
       prompts: {
         ...current.prompts,
         ...(updates.prompts || {}),
+      },
+      initialPrompts: {
+        ...current.initialPrompts,
+        ...(updates.initialPrompts || {}),
       },
       languages: updates.languages || current.languages,
     };
@@ -230,7 +239,37 @@ const useAdminState = () => {
     }
   };
 
-  const addLanguage = async (languageCode: string, prompt: string = '') => {
+  const saveInitialPrompt = async (languageCode: string, value: string) => {
+    setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
+
+    try {
+      const response = await fetch(`${API_URL}/api/admin/initial-prompts/${languageCode}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: state.authToken,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: value }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setState(prevState => ({
+          ...prevState,
+          config: data.config,
+          success: 'Initial prompt updated successfully!',
+          loading: false,
+        }));
+        setTimeout(() => setState(prevState => ({ ...prevState, success: '' })), 3000);
+      } else {
+        setState(prevState => ({ ...prevState, error: 'Failed to update initial prompt', loading: false }));
+      }
+    } catch (err) {
+      setState(prevState => ({ ...prevState, error: 'Failed to connect to server', loading: false }));
+    }
+  };
+
+  const addLanguage = async (languageCode: string, prompt: string = '', initialPrompt: string = '') => {
     setState(prevState => ({ ...prevState, loading: true, error: '', success: '' }));
 
     try {
@@ -240,7 +279,7 @@ const useAdminState = () => {
           Authorization: state.authToken,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ languageCode, prompt }),
+        body: JSON.stringify({ languageCode, prompt, initialPrompt }),
       });
 
       if (response.ok) {
@@ -302,6 +341,7 @@ const useAdminState = () => {
     login,
     reset,
     savePrompt,
+    saveInitialPrompt,
     addLanguage,
     removeLanguage,
     updateConfig,

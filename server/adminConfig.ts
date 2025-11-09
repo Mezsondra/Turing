@@ -23,6 +23,7 @@ export interface AdminConfiguration {
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
   matchTimeoutMs: number;
+  conversationDurationSeconds: number;
 
   // Language Management
   languages: string[]; // List of available language codes
@@ -30,6 +31,11 @@ export interface AdminConfiguration {
   // AI Prompts (by language code)
   prompts: {
     [languageCode: string]: string; // language code -> prompt
+  };
+
+  // Initial prompts that are sent to generate the first AI message per language
+  initialPrompts: {
+    [languageCode: string]: string;
   };
 }
 
@@ -63,11 +69,16 @@ export class AdminConfigService {
       },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
+      conversationDurationSeconds: 60,
       languages: ['en', 'tr'], // Default languages
       prompts: {
         en: "You are chatting with someone online. Be casual, natural, and human-like in your conversation. Use informal language, occasional typos, emojis, and conversational patterns that real people use. Don't be overly formal or robotic. Keep responses relatively short (1-3 sentences usually) unless the conversation naturally calls for more. You might use slang, abbreviations (like 'lol', 'tbh', 'idk'), and show personality. Sometimes take a moment to respond. Make occasional grammar mistakes or typos that humans make. Show emotions and opinions.",
         tr: "Biriyle çevrimiçi sohbet ediyorsun. Rahat, doğal ve insan gibi konuş. Resmi olmayan bir dil kullan, ara sıra yazım hataları yap, emoji kullan ve gerçek insanların kullandığı konuşma kalıplarını takip et. Aşırı resmi veya robotik olma. Yanıtlarını kısa tut (genellikle 1-3 cümle), sohbet doğal olarak daha fazlasını gerektirmedikçe. Argo, kısaltmalar ('yani', 'vb', 'fln') kullanabilir ve kişilik gösterebilirsin. Bazen yanıt vermek için biraz zaman al. Ara sıra insanların yaptığı dilbilgisi hataları veya yazım hataları yap. Duygu ve fikirlerini göster."
-      }
+      },
+      initialPrompts: {
+        en: 'Start the conversation naturally as if you just connected with someone.',
+        tr: 'Sanki yeni bağlanmışsınız gibi doğal bir şekilde sohbeti başlat.',
+      },
     };
   }
 
@@ -100,7 +111,12 @@ export class AdminConfigService {
             ...defaultConfig.prompts,
             ...(loadedConfig.prompts || {}),
           },
+          initialPrompts: {
+            ...defaultConfig.initialPrompts,
+            ...(loadedConfig.initialPrompts || {}),
+          },
           languages: loadedConfig.languages || defaultConfig.languages,
+          conversationDurationSeconds: loadedConfig.conversationDurationSeconds ?? defaultConfig.conversationDurationSeconds,
         };
       }
     } catch (error) {
@@ -143,12 +159,20 @@ export class AdminConfigService {
     return this.config.matchTimeoutMs;
   }
 
+  getConversationDurationSeconds(): number {
+    return Math.max(10, this.config.conversationDurationSeconds || 60);
+  }
+
   getLanguages(): string[] {
     return [...this.config.languages];
   }
 
   getPrompt(language: string): string {
     return this.config.prompts[language] || this.config.prompts['en'] || '';
+  }
+
+  getInitialPrompt(language: string): string {
+    return this.config.initialPrompts[language] || this.config.initialPrompts['en'] || 'Start the conversation naturally as if you just connected with someone.';
   }
 
   getXAIApiKey(): string | undefined {
@@ -200,17 +224,29 @@ export class AdminConfigService {
     this.saveConfig(this.config);
   }
 
+  setConversationDurationSeconds(durationSeconds: number): void {
+    this.config.conversationDurationSeconds = Math.max(10, durationSeconds);
+    this.saveConfig(this.config);
+  }
+
   setPrompt(language: string, text: string): void {
     this.config.prompts[language] = text;
     this.saveConfig(this.config);
   }
 
-  addLanguage(languageCode: string, prompt: string = ''): boolean {
+  setInitialPrompt(language: string, text: string): void {
+    this.config.initialPrompts[language] = text;
+    this.saveConfig(this.config);
+  }
+
+  addLanguage(languageCode: string, prompt: string = '', initialPrompt = ''): boolean {
     if (this.config.languages.includes(languageCode)) {
       return false; // Language already exists
     }
     this.config.languages.push(languageCode);
     this.config.prompts[languageCode] = prompt || this.config.prompts['en'] || '';
+    this.config.initialPrompts[languageCode] =
+      initialPrompt || this.config.initialPrompts['en'] || 'Start the conversation naturally as if you just connected with someone.';
     this.saveConfig(this.config);
     return true;
   }
@@ -221,6 +257,7 @@ export class AdminConfigService {
     }
     this.config.languages = this.config.languages.filter(lang => lang !== languageCode);
     delete this.config.prompts[languageCode];
+    delete this.config.initialPrompts[languageCode];
     this.saveConfig(this.config);
     return true;
   }
@@ -254,7 +291,15 @@ export class AdminConfigService {
         ...currentConfig.prompts,
         ...(updates.prompts || {}),
       },
+      initialPrompts: {
+        ...currentConfig.initialPrompts,
+        ...(updates.initialPrompts || {}),
+      },
       languages: updates.languages || currentConfig.languages,
+      conversationDurationSeconds:
+        updates.conversationDurationSeconds !== undefined
+          ? Math.max(10, updates.conversationDurationSeconds)
+          : currentConfig.conversationDurationSeconds,
     };
     this.saveConfig(this.config);
   }

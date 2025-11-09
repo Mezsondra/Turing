@@ -5,6 +5,7 @@ type Language = 'en' | 'tr';
 interface MatchedEvent {
   matchId: string;
   partnerType: 'unknown';
+  roundDurationSeconds?: number;
 }
 
 interface MessageEvent {

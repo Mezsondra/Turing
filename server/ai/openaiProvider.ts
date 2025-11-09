@@ -17,6 +17,7 @@ interface OpenAIResponse {
 export class OpenAIProvider implements AIProvider {
   public readonly name = 'openai';
   private sessions: Map<string, OpenAIMessage[]> = new Map();
+  private sessionLanguages: Map<string, Language> = new Map();
   private apiKey: string;
   private model: string;
   private baseURL: string;
@@ -24,7 +25,7 @@ export class OpenAIProvider implements AIProvider {
   constructor(apiKey: string, model: string = 'gpt-4o-mini', baseURL: string = 'https://api.openai.com/v1') {
     this.apiKey = apiKey;
     this.model = model;
-    this.baseURL = baseURL;
+    this.baseURL = baseURL.replace(/\/+$/, '');
   }
 
   async createSession(matchId: string, language: Language): Promise<void> {
@@ -39,6 +40,7 @@ export class OpenAIProvider implements AIProvider {
     ];
 
     this.sessions.set(matchId, messages);
+    this.sessionLanguages.set(matchId, language);
   }
 
   async sendMessage(matchId: string, message: string): Promise<string> {
@@ -90,14 +92,14 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async initializeConversation(matchId: string): Promise<string> {
-    return this.sendMessage(
-      matchId,
-      "Start the conversation naturally as if you just connected with someone."
-    );
+    const language = this.sessionLanguages.get(matchId) || 'en';
+    const initialPrompt = adminConfigService.getInitialPrompt(language);
+    return this.sendMessage(matchId, initialPrompt);
   }
 
   deleteSession(matchId: string): void {
     this.sessions.delete(matchId);
+    this.sessionLanguages.delete(matchId);
   }
 
   hasSession(matchId: string): boolean {
