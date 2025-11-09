@@ -5,6 +5,7 @@ import { adminConfigService } from '../adminConfig.js';
 export class GeminiProvider implements AIProvider {
   public readonly name = 'gemini';
   private sessions: Map<string, Chat> = new Map();
+  private sessionLanguages: Map<string, Language> = new Map();
   private apiKey: string;
   private model: string;
 
@@ -46,6 +47,7 @@ export class GeminiProvider implements AIProvider {
     });
 
     this.sessions.set(matchId, chat);
+    this.sessionLanguages.set(matchId, language);
   }
 
   async sendMessage(matchId: string, message: string): Promise<string> {
@@ -70,8 +72,10 @@ export class GeminiProvider implements AIProvider {
     }
 
     try {
+      const language = this.sessionLanguages.get(matchId) || 'en';
+      const initialPrompt = adminConfigService.getInitialPrompt(language);
       const response = await session.sendMessage({
-        message: "Start the conversation naturally as if you just connected with someone."
+        message: initialPrompt
       });
       return response.text;
     } catch (error) {
@@ -82,6 +86,7 @@ export class GeminiProvider implements AIProvider {
 
   deleteSession(matchId: string): void {
     this.sessions.delete(matchId);
+    this.sessionLanguages.delete(matchId);
   }
 
   hasSession(matchId: string): boolean {

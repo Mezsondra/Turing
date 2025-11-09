@@ -1,4 +1,3 @@
-import { AIBehavior } from './ai/baseProvider.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,13 +5,25 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export interface AIProviderSettings {
+  apiKey: string;
+  model: string;
+  apiBaseUrl?: string;
+}
+
 export interface AdminConfiguration {
   // Provider Settings
   aiProvider: 'gemini' | 'openai' | 'xai';
+  aiProviders: {
+    gemini: AIProviderSettings;
+    openai: AIProviderSettings;
+    xai: AIProviderSettings;
+  };
 
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
   matchTimeoutMs: number;
+  conversationDurationSeconds: number;
 
   // Language Management
   languages: string[]; // List of available language codes
@@ -20,6 +31,11 @@ export interface AdminConfiguration {
   // AI Prompts (by language code)
   prompts: {
     [languageCode: string]: string; // language code -> prompt
+  };
+
+  // Initial prompts that are sent to generate the first AI message per language
+  initialPrompts: {
+    [languageCode: string]: string;
   };
 }
 
@@ -35,13 +51,34 @@ export class AdminConfigService {
   private getDefaultConfig(): AdminConfiguration {
     return {
       aiProvider: (process.env.AI_PROVIDER as 'gemini' | 'openai' | 'xai') || 'gemini',
+      aiProviders: {
+        gemini: {
+          apiKey: process.env.GEMINI_API_KEY || '',
+          model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        },
+        openai: {
+          apiKey: process.env.OPENAI_API_KEY || '',
+          model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+          apiBaseUrl: process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1',
+        },
+        xai: {
+          apiKey: process.env.XAI_API_KEY || '',
+          model: process.env.XAI_MODEL || 'grok-1.5-flash',
+          apiBaseUrl: process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1',
+        },
+      },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
+      conversationDurationSeconds: 60,
       languages: ['en', 'tr'], // Default languages
       prompts: {
         en: "You are chatting with someone online. Be casual, natural, and human-like in your conversation. Use informal language, occasional typos, emojis, and conversational patterns that real people use. Don't be overly formal or robotic. Keep responses relatively short (1-3 sentences usually) unless the conversation naturally calls for more. You might use slang, abbreviations (like 'lol', 'tbh', 'idk'), and show personality. Sometimes take a moment to respond. Make occasional grammar mistakes or typos that humans make. Show emotions and opinions.",
         tr: "Biriyle çevrimiçi sohbet ediyorsun. Rahat, doğal ve insan gibi konuş. Resmi olmayan bir dil kullan, ara sıra yazım hataları yap, emoji kullan ve gerçek insanların kullandığı konuşma kalıplarını takip et. Aşırı resmi veya robotik olma. Yanıtlarını kısa tut (genellikle 1-3 cümle), sohbet doğal olarak daha fazlasını gerektirmedikçe. Argo, kısaltmalar ('yani', 'vb', 'fln') kullanabilir ve kişilik gösterebilirsin. Bazen yanıt vermek için biraz zaman al. Ara sıra insanların yaptığı dilbilgisi hataları veya yazım hataları yap. Duygu ve fikirlerini göster."
-      }
+      },
+      initialPrompts: {
+        en: 'Start the conversation naturally as if you just connected with someone.',
+        tr: 'Sanki yeni bağlanmışsınız gibi doğal bir şekilde sohbeti başlat.',
+      },
     };
   }
 
@@ -51,8 +88,36 @@ export class AdminConfigService {
         const data = fs.readFileSync(this.configPath, 'utf-8');
         const loadedConfig = JSON.parse(data);
 
-        // Merge with defaults to ensure all fields exist
-        return { ...this.getDefaultConfig(), ...loadedConfig };
+        const defaultConfig = this.getDefaultConfig();
+
+        return {
+          ...defaultConfig,
+          ...loadedConfig,
+          aiProviders: {
+            gemini: {
+              ...defaultConfig.aiProviders.gemini,
+              ...(loadedConfig.aiProviders?.gemini || {}),
+            },
+            openai: {
+              ...defaultConfig.aiProviders.openai,
+              ...(loadedConfig.aiProviders?.openai || {}),
+            },
+            xai: {
+              ...defaultConfig.aiProviders.xai,
+              ...(loadedConfig.aiProviders?.xai || {}),
+            },
+          },
+          prompts: {
+            ...defaultConfig.prompts,
+            ...(loadedConfig.prompts || {}),
+          },
+          initialPrompts: {
+            ...defaultConfig.initialPrompts,
+            ...(loadedConfig.initialPrompts || {}),
+          },
+          languages: loadedConfig.languages || defaultConfig.languages,
+          conversationDurationSeconds: loadedConfig.conversationDurationSeconds ?? defaultConfig.conversationDurationSeconds,
+        };
       }
     } catch (error) {
       console.error('Error loading admin config:', error);
@@ -82,12 +147,20 @@ export class AdminConfigService {
     return this.config.aiProvider;
   }
 
+  getProviderSettings(provider: 'gemini' | 'openai' | 'xai'): AIProviderSettings {
+    return { ...this.config.aiProviders[provider] };
+  }
+
   getAIMatchProbability(): number {
     return this.config.aiMatchProbability;
   }
 
   getMatchTimeoutMs(): number {
     return this.config.matchTimeoutMs;
+  }
+
+  getConversationDurationSeconds(): number {
+    return Math.max(10, this.config.conversationDurationSeconds || 60);
   }
 
   getLanguages(): string[] {
@@ -98,28 +171,40 @@ export class AdminConfigService {
     return this.config.prompts[language] || this.config.prompts['en'] || '';
   }
 
+  getInitialPrompt(language: string): string {
+    return this.config.initialPrompts[language] || this.config.initialPrompts['en'] || 'Start the conversation naturally as if you just connected with someone.';
+  }
+
   getXAIApiKey(): string | undefined {
-    return process.env.XAI_API_KEY;
+    return this.config.aiProviders.xai.apiKey || process.env.XAI_API_KEY;
   }
 
   getXAIModel(): string {
-    return process.env.XAI_MODEL || 'grok-1.5-flash';
+    return this.config.aiProviders.xai.model || process.env.XAI_MODEL || 'grok-1.5-flash';
+  }
+
+  getXAIBaseUrl(): string {
+    return this.config.aiProviders.xai.apiBaseUrl || process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1';
   }
 
   getGeminiApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY;
+    return this.config.aiProviders.gemini.apiKey || process.env.GEMINI_API_KEY;
   }
 
   getGeminiModel(): string {
-    return process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    return this.config.aiProviders.gemini.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   }
 
   getOpenAIApiKey(): string | undefined {
-    return process.env.OPENAI_API_KEY;
+    return this.config.aiProviders.openai.apiKey || process.env.OPENAI_API_KEY;
   }
 
   getOpenAIModel(): string {
-    return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    return this.config.aiProviders.openai.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  }
+
+  getOpenAIBaseUrl(): string {
+    return this.config.aiProviders.openai.apiBaseUrl || process.env.OPENAI_API_BASE_URL || 'https://api.openai.com/v1';
   }
 
 
@@ -139,17 +224,29 @@ export class AdminConfigService {
     this.saveConfig(this.config);
   }
 
+  setConversationDurationSeconds(durationSeconds: number): void {
+    this.config.conversationDurationSeconds = Math.max(10, durationSeconds);
+    this.saveConfig(this.config);
+  }
+
   setPrompt(language: string, text: string): void {
     this.config.prompts[language] = text;
     this.saveConfig(this.config);
   }
 
-  addLanguage(languageCode: string, prompt: string = ''): boolean {
+  setInitialPrompt(language: string, text: string): void {
+    this.config.initialPrompts[language] = text;
+    this.saveConfig(this.config);
+  }
+
+  addLanguage(languageCode: string, prompt: string = '', initialPrompt = ''): boolean {
     if (this.config.languages.includes(languageCode)) {
       return false; // Language already exists
     }
     this.config.languages.push(languageCode);
     this.config.prompts[languageCode] = prompt || this.config.prompts['en'] || '';
+    this.config.initialPrompts[languageCode] =
+      initialPrompt || this.config.initialPrompts['en'] || 'Start the conversation naturally as if you just connected with someone.';
     this.saveConfig(this.config);
     return true;
   }
@@ -160,12 +257,50 @@ export class AdminConfigService {
     }
     this.config.languages = this.config.languages.filter(lang => lang !== languageCode);
     delete this.config.prompts[languageCode];
+    delete this.config.initialPrompts[languageCode];
     this.saveConfig(this.config);
     return true;
   }
 
   updateConfig(updates: Partial<AdminConfiguration>): void {
-    this.config = { ...this.config, ...updates };
+    const currentConfig = this.config;
+
+    this.config = {
+      ...currentConfig,
+      ...updates,
+      aiProviders: {
+        ...currentConfig.aiProviders,
+        ...(updates.aiProviders
+          ? {
+              gemini: {
+                ...currentConfig.aiProviders.gemini,
+                ...(updates.aiProviders.gemini || {}),
+              },
+              openai: {
+                ...currentConfig.aiProviders.openai,
+                ...(updates.aiProviders.openai || {}),
+              },
+              xai: {
+                ...currentConfig.aiProviders.xai,
+                ...(updates.aiProviders.xai || {}),
+              },
+            }
+          : currentConfig.aiProviders),
+      },
+      prompts: {
+        ...currentConfig.prompts,
+        ...(updates.prompts || {}),
+      },
+      initialPrompts: {
+        ...currentConfig.initialPrompts,
+        ...(updates.initialPrompts || {}),
+      },
+      languages: updates.languages || currentConfig.languages,
+      conversationDurationSeconds:
+        updates.conversationDurationSeconds !== undefined
+          ? Math.max(10, updates.conversationDurationSeconds)
+          : currentConfig.conversationDurationSeconds,
+    };
     this.saveConfig(this.config);
   }
 

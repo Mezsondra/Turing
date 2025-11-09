@@ -1,10 +1,11 @@
+import dotenv from 'dotenv';
+
 dotenv.config({ path: '.env.local' });
 
 import express from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { matchmakingService } from './matchmaking.js';
 import { aiService } from './aiService.js';
 import { User } from './types.js';
@@ -12,6 +13,7 @@ import authRoutes from './routes/auth.js';
 import paymentRoutes from './routes/payment.js';
 import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
+import { adminConfigService } from './adminConfig.js';
 
 
 const app = express();
@@ -72,12 +74,14 @@ io.on('connection', (socket: Socket) => {
       const match = matchmakingService.getMatchForUser(user.id);
 
       if (match) {
+        const roundDurationSeconds = adminConfigService.getConversationDurationSeconds();
         if (match.isAiMatch) {
           // Matched with AI
           console.log(`User ${user.id} matched with AI`);
           socket.emit('matched', {
             matchId: match.id,
             partnerType: 'unknown', // Don't reveal it's AI
+            roundDurationSeconds,
           });
 
           // Initialize AI conversation
@@ -112,11 +116,13 @@ io.on('connection', (socket: Socket) => {
             socket.emit('matched', {
               matchId: match.id,
               partnerType: 'unknown',
+              roundDurationSeconds,
             });
 
             io.to(partner.socketId).emit('matched', {
               matchId: match.id,
               partnerType: 'unknown',
+              roundDurationSeconds,
             });
           }
         }

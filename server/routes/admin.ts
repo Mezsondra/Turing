@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { adminConfigService } from '../adminConfig.js';
+import { AIProviderFactory } from '../aiService.js';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.put('/config', requireAdmin, (req: Request, res: Response) => {
   try {
     const updates = req.body;
     adminConfigService.updateConfig(updates);
+    AIProviderFactory.reloadProvider();
     res.json({ success: true, config: adminConfigService.getConfig() });
   } catch (error) {
     console.error('Error updating admin config:', error);
@@ -42,6 +44,7 @@ router.put('/config', requireAdmin, (req: Request, res: Response) => {
 router.post('/reset', requireAdmin, (req: Request, res: Response) => {
   try {
     adminConfigService.resetToDefaults();
+    AIProviderFactory.reloadProvider();
     res.json({ success: true, config: adminConfigService.getConfig() });
   } catch (error) {
     console.error('Error resetting config:', error);
@@ -54,13 +57,13 @@ router.post('/reset', requireAdmin, (req: Request, res: Response) => {
 // Add a new language
 router.post('/languages', requireAdmin, (req: Request, res: Response) => {
   try {
-    const { languageCode, prompt } = req.body;
+    const { languageCode, prompt, initialPrompt } = req.body;
 
     if (!languageCode || typeof languageCode !== 'string') {
       return res.status(400).json({ success: false, error: 'Language code is required' });
     }
 
-    const success = adminConfigService.addLanguage(languageCode, prompt || '');
+    const success = adminConfigService.addLanguage(languageCode, prompt || '', initialPrompt || '');
 
     if (!success) {
       return res.status(400).json({ success: false, error: 'Language already exists' });
@@ -106,6 +109,24 @@ router.put('/prompts/:languageCode', requireAdmin, (req: Request, res: Response)
   } catch (error) {
     console.error('Error updating prompt:', error);
     res.status(500).json({ success: false, error: 'Failed to update prompt' });
+  }
+});
+
+// Update initial prompt for a specific language
+router.put('/initial-prompts/:languageCode', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { languageCode } = req.params;
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ success: false, error: 'Prompt text is required' });
+    }
+
+    adminConfigService.setInitialPrompt(languageCode, prompt);
+    res.json({ success: true, config: adminConfigService.getConfig() });
+  } catch (error) {
+    console.error('Error updating initial prompt:', error);
+    res.status(500).json({ success: false, error: 'Failed to update initial prompt' });
   }
 });
 

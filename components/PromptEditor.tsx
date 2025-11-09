@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface PromptEditorProps {
@@ -11,6 +11,10 @@ interface PromptEditorProps {
 const PromptEditor: React.FC<PromptEditorProps> = ({ title, initialValue, onSave, loading }) => {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue]);
 
   const handleSave = () => {
     onSave(value);
