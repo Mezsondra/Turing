@@ -55,44 +55,35 @@ router.post('/session', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Update game session with guess
+// Update game session with guess.
+//
+// Scoring is NOT done here. The server decides whether a guess was correct in
+// the socket 'submit-guess' handler, where it can see the real partner type.
+// This endpoint would otherwise let any client set its own score.
 router.put('/session/:sessionId', requireAuth, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
     const { sessionId } = req.params;
-    const { guess, wasCorrect } = req.body;
 
-    if (!guess || !['HUMAN', 'AI'].includes(guess)) {
-      return res.status(400).json({ error: 'Invalid guess' });
+    const session = db.getGameSession(sessionId);
+    if (!session || session.user_id !== userId) {
+      return res.status(404).json({ error: 'Session not found' });
     }
 
-    if (typeof wasCorrect !== 'boolean') {
-      return res.status(400).json({ error: 'wasCorrect must be a boolean' });
-    }
-
-    db.updateGameSession(sessionId, guess, wasCorrect);
-
-    // Update user score
-    db.updateUserScore(userId, wasCorrect);
-
-    // Get updated user data with score
     const user = db.getUserById(userId);
-
-    // Get updated stats
     const totalGames = db.getTotalGameCount(userId);
-    const shouldShowAd = totalGames % 5 === 0 && totalGames > 0;
 
     res.json({
       success: true,
-      shouldShowAd,
+      shouldShowAd: totalGames % 5 === 0 && totalGames > 0,
       score: user?.score || 0,
       gamesPlayed: user?.games_played || 0,
       gamesWon: user?.games_won || 0,
-      gamesLost: user?.games_lost || 0
+      gamesLost: user?.games_lost || 0,
     });
   } catch (error) {
-    console.error('Error updating game session:', error);
-    res.status(500).json({ error: 'Failed to update game session' });
+    console.error('Error reading game session:', error);
+    res.status(500).json({ error: 'Failed to read game session' });
   }
 });
 

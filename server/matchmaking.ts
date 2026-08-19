@@ -8,6 +8,25 @@ export class MatchmakingService {
   private activeMatches: Map<string, Match> = new Map();
   private userToMatch: Map<string, string> = new Map(); // userId -> matchId
   private matchTimeouts: Map<string, NodeJS.Timeout> = new Map();
+  private matchListeners: Array<(match: Match) => void> = [];
+
+  /**
+   * Fires whenever a match is created - including matches created by the
+   * AI-fallback timeout, which no caller can poll for.
+   */
+  onMatch(listener: (match: Match) => void): void {
+    this.matchListeners.push(listener);
+  }
+
+  private announce(match: Match): void {
+    for (const listener of this.matchListeners) {
+      try {
+        listener(match);
+      } catch (error) {
+        console.error('Match listener failed:', error);
+      }
+    }
+  }
 
   // Configuration - now loaded from admin config
   private get MATCH_TIMEOUT_MS(): number {
@@ -84,6 +103,7 @@ export class MatchmakingService {
     this.userToMatch.set(user1.id, matchId);
     this.userToMatch.set(user2.id, matchId);
 
+    this.announce(match);
     return matchId;
   }
 
@@ -95,9 +115,6 @@ export class MatchmakingService {
     const matchId = uuidv4();
 
     console.log(`Matching user ${user.id} with AI (language: ${user.language})`);
-
-    // Create AI session (AI always acts human-like)
-    aiService.createSession(matchId, user.language);
 
     const match: Match = {
       id: matchId,
@@ -111,7 +128,34 @@ export class MatchmakingService {
     this.activeMatches.set(matchId, match);
     this.userToMatch.set(user.id, matchId);
 
+    // Announce only once the AI session exists, so listeners can immediately
+    // ask it for the opening message.
+    aiService
+      .createSession(matchId, user.language)
+      .then(() => this.announce(match))
+      .catch((error) => {
+        console.error(`Failed to create AI session for match ${matchId}:`, error);
+        this.removeUser(user.id);
+        this.announceFailure(user);
+      });
+
     return matchId;
+  }
+
+  private failureListeners: Array<(user: User) => void> = [];
+
+  onMatchFailure(listener: (user: User) => void): void {
+    this.failureListeners.push(listener);
+  }
+
+  private announceFailure(user: User): void {
+    for (const listener of this.failureListeners) {
+      try {
+        listener(user);
+      } catch (error) {
+        console.error('Match failure listener failed:', error);
+      }
+    }
   }
 
   private clearMatchTimeout(userId: string): void {

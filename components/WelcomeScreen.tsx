@@ -4,15 +4,35 @@ import { useTranslations } from '../hooks/useTranslations';
 
 interface WelcomeScreenProps {
   onStartGame: () => void;
+  score?: number;
+  currentStreak?: number;
+  gamesPlayed?: number;
+  isPremium?: boolean;
+  onOpenAccount?: () => void;
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStartGame }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
+  onStartGame,
+  score = 0,
+  currentStreak = 0,
+  gamesPlayed = 0,
+  isPremium = false,
+  onOpenAccount,
+}) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { t } = useTranslations();
 
   return (
     <>
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center relative">
+        {onOpenAccount && (
+          <button
+            onClick={onOpenAccount}
+            className="absolute top-4 left-4 text-slate-400 hover:text-cyan-400 transition-colors text-sm font-semibold"
+          >
+            {isPremium ? `⭐ ${t('premium_member')}` : t('account')}
+          </button>
+        )}
         <button
           onClick={() => setIsSettingsOpen(true)}
           className="absolute top-4 right-4 text-slate-400 hover:text-cyan-400 transition-colors"
@@ -28,6 +48,21 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStartGame }) => {
           <p className="text-lg md:text-xl text-slate-300 mb-8">
             {t('welcome_description')}
           </p>
+          {gamesPlayed > 0 && (
+            <div className="flex items-center justify-center gap-6 mb-8">
+              <div>
+                <p className="text-slate-400 text-sm">{t('total_score')}</p>
+                <p className="text-3xl font-bold text-cyan-400">{score}</p>
+              </div>
+              {currentStreak > 0 && (
+                <div>
+                  <p className="text-slate-400 text-sm">{t('current_streak')}</p>
+                  <p className="text-3xl font-bold text-orange-400">🔥 {currentStreak}</p>
+                </div>
+              )}
+            </div>
+          )}
+
           <button
             onClick={onStartGame}
             className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-3 px-8 rounded-full text-xl transition-transform transform hover:scale-105"

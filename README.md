@@ -42,12 +42,17 @@ A realistic Turing Test game where users chat with either a real human or an AI 
    ```
 
 2. **Set up environment variables:**
-   - Open [.env.local](.env.local) file
-   - Add your Gemini API key:
+   - Copy `.env.local.example` to `.env.local`
+   - `GEMINI_API_KEY` - get one from https://aistudio.google.com/apikey
+   - `JWT_SECRET` and `ADMIN_PASSWORD` - **required**; the server refuses to
+     start without them. Generate with:
+     ```bash
+     node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
      ```
-     GEMINI_API_KEY=your_api_key_here
-     ```
-   - Get your API key from: https://aistudio.google.com/apikey
+
+   Env vars are loaded by node's `--env-file` flag, not by `dotenv` - ES modules
+   evaluate imports before any module body, so a `dotenv.config()` call in
+   `server/index.ts` would run too late to be seen by imported modules.
 
 3. **Run the app:**
 
@@ -120,3 +125,30 @@ Feel free to open issues or submit pull requests!
 ## License
 
 MIT
+
+## Deploying to your own server
+
+The built frontend is served by the same Express process as the API, so there is
+one service to run on one port.
+
+```bash
+git clone <repo> /srv/turing && cd /srv/turing
+npm ci          # build on the server: better-sqlite3 is a native module and a
+                # macOS build will not load on Linux
+npm run build   # emits dist/, which the server serves
+cp .env.local.example .env.local && $EDITOR .env.local
+```
+
+Then use the files in [deploy/](deploy/):
+
+- `turing.service` - systemd unit (auto-restart, starts on boot)
+- `Caddyfile` - TLS + WebSocket reverse proxy, certificates handled automatically
+- `backup.sh` - nightly SQLite backup for cron
+
+Make sure the service user owns the whole directory (`chown -R turing:turing
+/srv/turing`) - SQLite creates `turing.db-wal` and `turing.db-shm` alongside the
+database, so it needs write permission on the folder, not just the file.
+
+**Scaling ceiling:** matches live in memory and the database is a local file, so
+this runs as exactly one instance. That is fine well past launch; move matches to
+Redis and the database to Postgres only when one machine stops coping.

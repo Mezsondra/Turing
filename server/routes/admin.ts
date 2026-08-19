@@ -1,26 +1,66 @@
 import { Router, Request, Response } from 'express';
+import { timingSafeEqual } from 'crypto';
 import { adminConfigService } from '../adminConfig.js';
 import { AIProviderFactory } from '../aiService.js';
+import { rateLimit } from '../rateLimit.js';
 
 const router = Router();
 
-// Simple admin authentication middleware
-const requireAdmin = (req: Request, res: Response, next: Function) => {
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const authHeader = req.headers.authorization;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD is not set. Refusing to start with an unprotected admin API.');
+}
 
-  if (!authHeader || authHeader !== `Bearer ${adminPassword}`) {
+// Placeholder sent to the client instead of a real key. Anything that comes
+// back with this value means "unchanged", so we keep the stored key.
+const MASKED = '********';
+
+const maskKeys = (config: any) => ({
+  ...config,
+  aiProviders: Object.fromEntries(
+    Object.entries(config.aiProviders).map(([name, settings]: [string, any]) => [
+      name,
+      { ...settings, apiKey: settings.apiKey ? MASKED : '' },
+    ])
+  ),
+});
+
+// Drop masked keys from an incoming update so a round-trip cannot wipe them.
+const stripMaskedKeys = (updates: any) => {
+  if (!updates?.aiProviders) return updates;
+  const providers = Object.fromEntries(
+    Object.entries(updates.aiProviders).map(([name, settings]: [string, any]) => {
+      if (settings?.apiKey === MASKED) {
+        const { apiKey, ...rest } = settings;
+        return [name, rest];
+      }
+      return [name, settings];
+    })
+  );
+  return { ...updates, aiProviders: providers };
+};
+
+const requireAdmin = (req: Request, res: Response, next: Function) => {
+  const authHeader = req.headers.authorization || '';
+  const provided = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(ADMIN_PASSWORD);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   next();
 };
 
+// Slow down password guessing against the admin API.
+router.use(rateLimit(20, 60_000));
+
 // Get current admin configuration
 router.get('/config', requireAdmin, (req: Request, res: Response) => {
   try {
     const config = adminConfigService.getConfig();
-    res.json({ success: true, config });
+    res.json({ success: true, config: maskKeys(config) });
   } catch (error) {
     console.error('Error getting admin config:', error);
     res.status(500).json({ success: false, error: 'Failed to get configuration' });
@@ -30,10 +70,9 @@ router.get('/config', requireAdmin, (req: Request, res: Response) => {
 // Update full configuration
 router.put('/config', requireAdmin, (req: Request, res: Response) => {
   try {
-    const updates = req.body;
-    adminConfigService.updateConfig(updates);
+    adminConfigService.updateConfig(stripMaskedKeys(req.body));
     AIProviderFactory.reloadProvider();
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error updating admin config:', error);
     res.status(500).json({ success: false, error: 'Failed to update configuration' });
@@ -45,7 +84,7 @@ router.post('/reset', requireAdmin, (req: Request, res: Response) => {
   try {
     adminConfigService.resetToDefaults();
     AIProviderFactory.reloadProvider();
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error resetting config:', error);
     res.status(500).json({ success: false, error: 'Failed to reset configuration' });
@@ -69,7 +108,7 @@ router.post('/languages', requireAdmin, (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Language already exists' });
     }
 
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error adding language:', error);
     res.status(500).json({ success: false, error: 'Failed to add language' });
@@ -87,7 +126,7 @@ router.delete('/languages/:languageCode', requireAdmin, (req: Request, res: Resp
       return res.status(400).json({ success: false, error: 'Cannot remove this language (it may be English or non-existent)' });
     }
 
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error removing language:', error);
     res.status(500).json({ success: false, error: 'Failed to remove language' });
@@ -105,7 +144,7 @@ router.put('/prompts/:languageCode', requireAdmin, (req: Request, res: Response)
     }
 
     adminConfigService.setPrompt(languageCode, prompt);
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error updating prompt:', error);
     res.status(500).json({ success: false, error: 'Failed to update prompt' });
@@ -123,7 +162,7 @@ router.put('/initial-prompts/:languageCode', requireAdmin, (req: Request, res: R
     }
 
     adminConfigService.setInitialPrompt(languageCode, prompt);
-    res.json({ success: true, config: adminConfigService.getConfig() });
+    res.json({ success: true, config: maskKeys(adminConfigService.getConfig()) });
   } catch (error) {
     console.error('Error updating initial prompt:', error);
     res.status(500).json({ success: false, error: 'Failed to update initial prompt' });

@@ -16,21 +16,26 @@ interface ChatScreenProps {
 const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'searching' | 'matched' | 'error'>('connecting');
-  const [matchId, setMatchId] = useState<string | null>(null);
-  const [actualPartnerType, setActualPartnerType] = useState<'HUMAN' | 'AI' | null>(null);
-  const [roundDurationSeconds, setRoundDurationSeconds] = useState(60);
+  const [roundEndsAt, setRoundEndsAt] = useState<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const actualPartnerTypeRef = useRef<'HUMAN' | 'AI' | null>(null);
-  const revealTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const onTimeUpRef = useRef(onTimeUp);
+  useEffect(() => { onTimeUpRef.current = onTimeUp; }, [onTimeUp]);
   const { language, isSoundEnabled, isVibrationEnabled } = useSettings();
   const { t } = useTranslations();
 
+  // Read through refs so changing a setting mid-match does not tear down the
+  // socket and throw the player back into the queue.
+  const soundRef = useRef(isSoundEnabled);
+  const vibrationRef = useRef(isVibrationEnabled);
+  useEffect(() => { soundRef.current = isSoundEnabled; }, [isSoundEnabled]);
+  useEffect(() => { vibrationRef.current = isVibrationEnabled; }, [isVibrationEnabled]);
+
   useEffect(() => {
     let mounted = true;
+    const unsubscribers: Array<() => void> = [];
 
     const initializeConnection = async () => {
       try {
@@ -39,70 +44,51 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
 
         if (!mounted) return;
 
-        // Set up event listeners
-        socketService.onSearching(() => {
-          if (mounted) setConnectionStatus('searching');
-        });
+        unsubscribers.push(
+          socketService.onSearching(() => {
+            if (mounted) setConnectionStatus('searching');
+          }),
 
-        socketService.onMatched(({ matchId: newMatchId, roundDurationSeconds: duration }) => {
-          if (mounted) {
-            console.log('Matched! Match ID:', newMatchId);
-            setRoundDurationSeconds(duration ?? 60);
-            setMatchId(newMatchId);
+          socketService.onMatched(({ roundEndsAt: endsAt, roundDurationSeconds }) => {
+            if (!mounted) return;
+            setRoundEndsAt(endsAt ?? Date.now() + (roundDurationSeconds ?? 60) * 1000);
             setConnectionStatus('matched');
             setMessages([]);
-            setActualPartnerType(null);
-            actualPartnerTypeRef.current = null;
-            setIsWaitingForResponse(false);
             setIsPartnerTyping(false);
-          }
-        });
+          }),
 
-        socketService.onMessage(({ text }) => {
-          if (!mounted) return;
+          socketService.onMessage(({ text }) => {
+            if (!mounted) return;
+            if (soundRef.current) playSound('received');
+            if (vibrationRef.current) triggerVibration();
+            setMessages((prev) => [...prev, { role: 'model', text }]);
+            setIsPartnerTyping(false);
+          }),
 
-          console.log('Received message:', text);
-          if (isSoundEnabled) playSound('received');
-          if (isVibrationEnabled) triggerVibration();
+          socketService.onPartnerTyping(({ isTyping }) => {
+            if (mounted) setIsPartnerTyping(isTyping);
+          }),
 
-          setMessages((prev) => [...prev, { role: 'model', text }]);
-          setIsWaitingForResponse(false);
-          setIsPartnerTyping(false);
-        });
+          // The server ends the round and reveals the partner, so both players
+          // in a human-vs-human match stop at exactly the same moment.
+          socketService.onRevealPartner(({ actualPartnerType, matchId }) => {
+            if (mounted) onTimeUpRef.current(actualPartnerType, matchId);
+          }),
 
-        socketService.onPartnerTyping(({ isTyping }) => {
-          if (mounted) {
-            setIsPartnerTyping(isTyping);
-          }
-        });
-
-        socketService.onRevealPartner(({ actualPartnerType: partnerType, matchId: revealedMatchId }) => {
-          if (mounted) {
-            console.log('Partner revealed:', partnerType, 'matchId:', revealedMatchId);
-            setActualPartnerType(partnerType);
-            actualPartnerTypeRef.current = partnerType;
-            // Update matchId if provided
-            if (revealedMatchId && !matchId) {
-              setMatchId(revealedMatchId);
+          socketService.onPartnerDisconnected(() => {
+            if (mounted) {
+              alert('Your partner has disconnected. Returning to welcome screen.');
+              window.location.reload();
             }
-          }
-        });
+          }),
 
-        socketService.onPartnerDisconnected(() => {
-          if (mounted) {
-            alert('Your partner has disconnected. Returning to welcome screen.');
-            window.location.reload();
-          }
-        });
-
-        socketService.onError(({ message }) => {
-          if (mounted) {
+          socketService.onError(({ message }) => {
+            if (!mounted) return;
             console.error('Socket error:', message);
             setConnectionStatus('error');
-          }
-        });
+          })
+        );
 
-        // Join matchmaking queue
         socketService.joinQueue(language);
       } catch (error) {
         console.error('Failed to connect:', error);
@@ -114,20 +100,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
 
     return () => {
       mounted = false;
-      socketService.removeAllListeners();
-      socketService.disconnect();
+      // Detach only this screen's listeners. The socket itself stays open: the
+      // guess is submitted from App after this component unmounts, and closing
+      // the socket would destroy the match server-side before it arrives.
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      if (revealTimeoutRef.current) {
-        clearTimeout(revealTimeoutRef.current);
-      }
     };
-  }, [language, isSoundEnabled, isVibrationEnabled]);
-
-  useEffect(() => {
-    actualPartnerTypeRef.current = actualPartnerType;
-  }, [actualPartnerType]);
+  }, [language]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -135,9 +116,9 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || connectionStatus !== 'matched' || isWaitingForResponse) return;
+    if (!inputValue.trim() || connectionStatus !== 'matched') return;
 
-    if (isSoundEnabled) playSound('sent');
+    if (soundRef.current) playSound('sent');
 
     const userMessage: Message = { role: 'user', text: inputValue };
     setMessages((prev) => [...prev, userMessage]);
@@ -145,7 +126,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     // Send message via socket
     socketService.sendMessage(inputValue);
     setInputValue('');
-    setIsWaitingForResponse(true);
 
     // Stop typing indicator
     socketService.sendTyping(false);
@@ -170,27 +150,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     } else {
       socketService.sendTyping(false);
     }
-  };
-
-  const handleTimeUp = () => {
-    // Request partner reveal from server
-    socketService.notifyTimeUp();
-
-    // Wait a bit for the reveal to arrive, then call parent
-    if (revealTimeoutRef.current) {
-      clearTimeout(revealTimeoutRef.current);
-    }
-
-    revealTimeoutRef.current = setTimeout(() => {
-      const partnerType = actualPartnerTypeRef.current;
-      if (partnerType) {
-        onTimeUp(partnerType, matchId || '');
-      } else {
-        // Fallback if reveal didn't arrived
-        console.warn('Partner type not revealed, using fallback');
-        onTimeUp('AI', matchId || '');
-      }
-    }, 500);
   };
 
   // Show loading/searching state
@@ -223,7 +182,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     <div className="flex flex-col h-screen bg-slate-800">
       <header className="bg-slate-900/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-slate-700 sticky top-0">
         <h2 className="text-xl font-bold text-slate-200">{t('score')}: <span className="text-cyan-400">{score}</span></h2>
-        <Timer key={matchId || 'waiting'} duration={roundDurationSeconds} onTimeUp={handleTimeUp} />
+        {roundEndsAt && <Timer endsAt={roundEndsAt} />}
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
@@ -254,20 +213,18 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
             onChange={handleInputChange}
             placeholder={t('type_your_message')}
             className="flex-1 bg-slate-700 border border-slate-600 rounded-full py-2 px-4 text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-            disabled={isWaitingForResponse || connectionStatus !== 'matched'}
+            disabled={connectionStatus !== 'matched'}
             aria-label={t('type_your_message')}
           />
           <button
             type="submit"
             className="bg-cyan-500 text-white rounded-full p-3 hover:bg-cyan-600 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors"
-            disabled={isWaitingForResponse || !inputValue.trim() || connectionStatus !== 'matched'}
+            disabled={!inputValue.trim() || connectionStatus !== 'matched'}
             aria-label="Send Message"
           >
-            {isWaitingForResponse ? <LoadingSpinner /> : (
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-              </svg>
-            )}
+            </svg>
           </button>
         </form>
       </footer>

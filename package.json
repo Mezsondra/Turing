@@ -8,7 +8,9 @@
     "server": "tsx --env-file .env.local server/index.ts",
     "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "tsx --env-file .env.local server/index.ts",
+    "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.28.0",
@@ -27,6 +29,7 @@
     "uuid": "^11.0.5"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
@@ -36,6 +39,7 @@
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "concurrently": "^9.2.1",
+    "tailwindcss": "^4.3.3",
     "tsx": "^4.19.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"

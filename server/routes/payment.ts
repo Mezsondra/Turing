@@ -1,5 +1,5 @@
 import express from 'express';
-import { stripeService } from '../payments/stripeService.js';
+import { stripeService, isPremiumPlan } from '../payments/stripeService.js';
 import { db } from '../database/db.js';
 import { requireAuth, AuthRequest } from '../middleware/authMiddleware.js';
 
@@ -33,8 +33,13 @@ router.post('/create-checkout', requireAuth, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
     const user = req.user!;
+    const { plan } = req.body;
 
-    const url = await stripeService.createCheckoutSession(userId, user.email);
+    if (!isPremiumPlan(plan)) {
+      return res.status(400).json({ error: 'Unknown plan' });
+    }
+
+    const url = await stripeService.createCheckoutSession(userId, user.email, plan);
     res.json({ url });
   } catch (error) {
     console.error('Error creating checkout session:', error);

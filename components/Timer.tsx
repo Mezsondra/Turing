@@ -1,31 +1,20 @@
-
 import React, { useState, useEffect } from 'react';
 
 interface TimerProps {
-  duration: number;
-  onTimeUp: () => void;
+  /** Server-supplied end time. The server owns the round clock; this only displays it. */
+  endsAt: number;
 }
 
-const Timer: React.FC<TimerProps> = ({ duration, onTimeUp }) => {
-  const [timeLeft, setTimeLeft] = useState(duration);
+const secondsLeft = (endsAt: number) => Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+
+const Timer: React.FC<TimerProps> = ({ endsAt }) => {
+  const [timeLeft, setTimeLeft] = useState(() => secondsLeft(endsAt));
 
   useEffect(() => {
-    setTimeLeft(duration);
-  }, [duration]);
-
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      onTimeUp();
-      return;
-    }
-
-    const intervalId = setInterval(() => {
-      setTimeLeft((prevTime) => prevTime - 1);
-    }, 1000);
-
+    setTimeLeft(secondsLeft(endsAt));
+    const intervalId = setInterval(() => setTimeLeft(secondsLeft(endsAt)), 250);
     return () => clearInterval(intervalId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft]);
+  }, [endsAt]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

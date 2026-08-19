@@ -1,7 +1,9 @@
 export interface User {
   id: string;
+  /** Database user id (guest or registered). Survives reconnects; `id` does not. */
+  playerId: string;
   socketId: string;
-  language: 'en' | 'tr';
+  language: string; // dynamic: admin can add languages
   joinedAt: number;
 }
 

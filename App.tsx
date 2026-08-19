@@ -1,92 +1,81 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import WelcomeScreen from './components/WelcomeScreen';
 import ChatScreen from './components/ChatScreen';
 import GuessScreen from './components/GuessScreen';
 import ResultScreen from './components/ResultScreen';
 import AdminPage from './components/AdminPage';
+import AdModal from './components/AdModal';
+import PremiumModal, { PremiumPlan } from './components/PremiumModal';
+import AuthModal from './components/AuthModal';
+import { useAuth } from './context/AuthContext';
+import { useTranslations } from './hooks/useTranslations';
 import { GameState } from './types';
 import { socketService } from './services/socketService';
 
 const App: React.FC = () => {
+  const { isAuthenticated, isPremium, upgrade } = useAuth();
+  const { t } = useTranslations();
+  const [modal, setModal] = useState<'none' | 'ad' | 'premium' | 'auth'>('none');
+  const [pendingAd, setPendingAd] = useState(false);
   const [gameState, setGameState] = useState<GameState>(GameState.WELCOME);
-  const [score, setScore] = useState(0);
   const [lastGuessCorrect, setLastGuessCorrect] = useState(false);
   const [partnerType, setPartnerType] = useState<'HUMAN' | 'AI'>('AI');
   const [matchId, setMatchId] = useState<string>('');
-  const pendingGuessRef = useRef<'HUMAN' | 'AI' | null>(null);
+  const [fooledPartner, setFooledPartner] = useState(false);
   const [scoreData, setScoreData] = useState({
     score: 0,
     gamesPlayed: 0,
     gamesWon: 0,
-    gamesLost: 0
+    gamesLost: 0,
+    currentStreak: 0,
+    bestStreak: 0,
+    timesFooled: 0,
   });
 
-  const applyLocalGuessResult = (guess: 'HUMAN' | 'AI') => {
-    pendingGuessRef.current = null;
-    const wasCorrect = guess === partnerType;
-    const pointsDelta = wasCorrect ? 10 : -5;
-
-    setLastGuessCorrect(wasCorrect);
-    setScore((prevScore) => prevScore + pointsDelta);
-    setScoreData((prev) => ({
-      score: prev.score + pointsDelta,
-      gamesPlayed: prev.gamesPlayed + 1,
-      gamesWon: prev.gamesWon + (wasCorrect ? 1 : 0),
-      gamesLost: prev.gamesLost + (wasCorrect ? 0 : 1),
-    }));
-    setGameState(GameState.RESULT);
-  };
-
+  // Score and stats come from the server, which owns them. The client never
+  // computes a score - it only displays what it is told.
   useEffect(() => {
-    // Set up listener for guess results
-    const unsubscribe = socketService.onGuessResult((result) => {
+    // Connect at app start, not when the chat opens, so the welcome screen can
+    // show the player's streak - which is what makes it worth coming back for.
+    socketService.connect().catch((error) => console.error('Connection failed:', error));
+
+    const unsubscribeStats = socketService.onStats(setScoreData);
+
+    // A human partner may declare you a bot before or after your own guess
+    // lands, so this is tracked separately rather than folded into the result.
+    const unsubscribeVerdict = socketService.onPartnerVerdict(({ fooledPartner: fooled }) => {
+      setFooledPartner(fooled);
+    });
+
+    const unsubscribeGuess = socketService.onGuessResult((result) => {
       if (result.error) {
         console.error('Error submitting guess:', result.error);
-        const fallbackGuess = pendingGuessRef.current;
-        pendingGuessRef.current = null;
-        if (fallbackGuess) {
-          applyLocalGuessResult(fallbackGuess);
-        }
         return;
       }
 
-      pendingGuessRef.current = null;
       setLastGuessCorrect(result.wasCorrect);
-
-      const hasServerStats =
-        result.score !== 0 ||
-        result.gamesPlayed > 0 ||
-        result.gamesWon > 0 ||
-        result.gamesLost > 0;
-      const pointsDelta = result.wasCorrect ? 10 : -5;
-
-      setScore((prevScore) => (hasServerStats ? result.score : prevScore + pointsDelta));
-
-      setScoreData((prev) =>
-        hasServerStats
-          ? {
-              score: result.score,
-              gamesPlayed: result.gamesPlayed,
-              gamesWon: result.gamesWon,
-              gamesLost: result.gamesLost,
-            }
-          : {
-              score: prev.score + pointsDelta,
-              gamesPlayed: prev.gamesPlayed + 1,
-              gamesWon: prev.gamesWon + (result.wasCorrect ? 1 : 0),
-              gamesLost: prev.gamesLost + (result.wasCorrect ? 0 : 1),
-            }
-      );
-
+      setPendingAd(Boolean(result.shouldShowAd));
+      setScoreData({
+        score: result.score,
+        gamesPlayed: result.gamesPlayed,
+        gamesWon: result.gamesWon,
+        gamesLost: result.gamesLost,
+        currentStreak: result.currentStreak,
+        bestStreak: result.bestStreak,
+        timesFooled: result.timesFooled,
+      });
       setGameState(GameState.RESULT);
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeStats();
+      unsubscribeVerdict();
+      unsubscribeGuess();
     };
   }, []);
 
   const handleStartGame = () => {
+    setFooledPartner(false);
     setGameState(GameState.CHATTING);
   };
 
@@ -98,29 +87,41 @@ const App: React.FC = () => {
   };
 
   const handleGuess = (guess: 'HUMAN' | 'AI') => {
-    // Submit guess via socket and wait for result
-    pendingGuessRef.current = guess;
-    if (matchId) {
-      try {
-        socketService.submitGuess(matchId, guess);
-      } catch (error) {
-        console.error('Failed to submit guess via socket:', error);
-        applyLocalGuessResult(guess);
-      }
-    } else {
-      // Fallback for local scoring if no matchId
-      applyLocalGuessResult(guess);
+    try {
+      socketService.submitGuess(matchId, guess);
+    } catch (error) {
+      console.error('Failed to submit guess:', error);
     }
   };
 
   const handlePlayAgain = () => {
+    // Premium removes the interstitial entirely; everyone else sees one every
+    // few rounds, and the server decides when.
+    if (pendingAd && !isPremium) {
+      setModal('ad');
+      return;
+    }
     setGameState(GameState.WELCOME);
+  };
+
+  const dismissAd = () => {
+    setPendingAd(false);
+    setModal('none');
+    setGameState(GameState.WELCOME);
+  };
+
+  // Premium has to be attached to an account, or it would vanish with the
+  // browser storage the player never knew existed.
+  const openPremium = () => setModal(isAuthenticated ? 'premium' : 'auth');
+
+  const handleUpgrade = async (plan: PremiumPlan) => {
+    await upgrade(plan);
   };
 
   const renderGameState = () => {
     switch (gameState) {
       case GameState.CHATTING:
-        return <ChatScreen key={Date.now()} onTimeUp={handleTimeUp} score={score} />;
+        return <ChatScreen onTimeUp={handleTimeUp} score={scoreData.score} />;
       case GameState.GUESSING:
         return <GuessScreen onGuess={handleGuess} />;
       case GameState.RESULT:
@@ -132,10 +133,23 @@ const App: React.FC = () => {
           gamesPlayed={scoreData.gamesPlayed}
           gamesWon={scoreData.gamesWon}
           gamesLost={scoreData.gamesLost}
+          currentStreak={scoreData.currentStreak}
+          bestStreak={scoreData.bestStreak}
+          timesFooled={scoreData.timesFooled}
+          fooledPartner={fooledPartner}
         />;
       case GameState.WELCOME:
       default:
-        return <WelcomeScreen onStartGame={handleStartGame} />;
+        return (
+          <WelcomeScreen
+            onStartGame={handleStartGame}
+            score={scoreData.score}
+            currentStreak={scoreData.currentStreak}
+            gamesPlayed={scoreData.gamesPlayed}
+            isPremium={isPremium}
+            onOpenAccount={() => setModal(isAuthenticated ? 'premium' : 'auth')}
+          />
+        );
     }
   };
 
@@ -149,6 +163,14 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 font-sans">
       {renderGameState()}
+
+      {modal === 'ad' && <AdModal onClose={dismissAd} onUpgrade={openPremium} />}
+      {modal === 'premium' && (
+        <PremiumModal onClose={() => setModal('none')} onUpgrade={handleUpgrade} />
+      )}
+      {modal === 'auth' && (
+        <AuthModal onClose={() => setModal('none')} reason={t('login_to_upgrade')} />
+      )}
     </div>
   );
 };

@@ -1,11 +1,25 @@
 import { io, Socket } from 'socket.io-client';
+import { API_URL } from '../lib/api';
+import { getDeviceId } from '../lib/deviceId';
 
-type Language = 'en' | 'tr';
+type Language = string; // admin can add languages at runtime
 
 interface MatchedEvent {
   matchId: string;
   partnerType: 'unknown';
   roundDurationSeconds?: number;
+  /** Server-authoritative round end time (epoch ms). */
+  roundEndsAt: number;
+}
+
+export interface StatsEvent {
+  score: number;
+  gamesPlayed: number;
+  gamesWon: number;
+  gamesLost: number;
+  currentStreak: number;
+  bestStreak: number;
+  timesFooled: number;
 }
 
 interface MessageEvent {
@@ -18,12 +32,12 @@ interface RevealPartnerEvent {
   matchId: string;
 }
 
-interface GuessResultEvent {
+interface GuessResultEvent extends StatsEvent {
   wasCorrect: boolean;
-  score: number;
-  gamesPlayed: number;
-  gamesWon: number;
-  gamesLost: number;
+  /** Server-decided ad pacing, so a client cannot opt itself out. */
+  shouldShowAd?: boolean;
+  /** False when the round could not be saved (no device id). */
+  persisted?: boolean;
   error?: string;
 }
 
@@ -31,15 +45,32 @@ export class SocketService {
   private socket: Socket | null = null;
   private serverUrl: string;
   private pendingGuessResultHandlers: Array<(data: GuessResultEvent) => void> = [];
+  private statsHandlers: Array<(data: StatsEvent) => void> = [];
+  private connecting: Promise<void> | null = null;
+  private latestStats: StatsEvent | null = null;
 
   constructor() {
-    this.serverUrl = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+    this.serverUrl = API_URL;
   }
 
   connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    // The socket outlives the chat screen, so a second call must reuse it.
+    // Latching the in-flight promise matters too: React StrictMode calls this
+    // twice in a row, and checking `connected` alone would orphan the first
+    // socket while it was still handshaking.
+    if (this.socket?.connected) return Promise.resolve();
+    if (this.connecting) return this.connecting;
+
+    this.connecting = new Promise((resolve, reject) => {
       this.socket = io(this.serverUrl, {
         transports: ['websocket', 'polling'],
+        // A signed-in player is identified by their token; guests by device id.
+        auth: { deviceId: getDeviceId(), token: localStorage.getItem('auth_token') || undefined },
+      });
+
+      this.socket.on('stats', (stats: StatsEvent) => {
+        this.latestStats = stats;
+        this.statsHandlers.forEach((handler) => handler(stats));
       });
 
       this.socket.on('connect', () => {
@@ -54,9 +85,12 @@ export class SocketService {
 
       this.socket.on('connect_error', (error) => {
         console.error('Connection error:', error);
+        this.connecting = null;
         reject(error);
       });
     });
+
+    return this.connecting;
   }
 
   disconnect(): void {
@@ -64,6 +98,7 @@ export class SocketService {
       this.socket.disconnect();
       this.socket = null;
     }
+    this.connecting = null;
   }
 
   joinQueue(language: Language): void {
@@ -88,13 +123,6 @@ export class SocketService {
     this.socket.emit('typing', { isTyping });
   }
 
-  notifyTimeUp(): void {
-    if (!this.socket) {
-      throw new Error('Socket not connected');
-    }
-    this.socket.emit('time-up');
-  }
-
   submitGuess(matchId: string, guess: 'HUMAN' | 'AI'): void {
     if (!this.socket) {
       throw new Error('Socket not connected');
@@ -102,39 +130,55 @@ export class SocketService {
     this.socket.emit('submit-guess', { matchId, guess });
   }
 
-  onSearching(callback: () => void): void {
-    if (!this.socket) return;
-    this.socket.on('searching', callback);
+  /** Subscribes to a socket event and returns an unsubscribe function. */
+  private subscribe<T>(event: string, callback: (data: T) => void): () => void {
+    this.socket?.on(event, callback as never);
+    return () => {
+      this.socket?.off(event, callback as never);
+    };
   }
 
-  onMatched(callback: (data: MatchedEvent) => void): void {
-    if (!this.socket) return;
-    this.socket.on('matched', callback);
+  onSearching(callback: () => void): () => void {
+    return this.subscribe('searching', callback);
   }
 
-  onMessage(callback: (data: MessageEvent) => void): void {
-    if (!this.socket) return;
-    this.socket.on('message', callback);
+  onMatched(callback: (data: MatchedEvent) => void): () => void {
+    return this.subscribe('matched', callback);
   }
 
-  onPartnerTyping(callback: (data: { isTyping: boolean }) => void): void {
-    if (!this.socket) return;
-    this.socket.on('partner-typing', callback);
+  onMessage(callback: (data: MessageEvent) => void): () => void {
+    return this.subscribe('message', callback);
   }
 
-  onRevealPartner(callback: (data: RevealPartnerEvent) => void): void {
-    if (!this.socket) return;
-    this.socket.on('reveal-partner', callback);
+  onPartnerTyping(callback: (data: { isTyping: boolean }) => void): () => void {
+    return this.subscribe('partner-typing', callback);
   }
 
-  onPartnerDisconnected(callback: () => void): void {
-    if (!this.socket) return;
-    this.socket.on('partner-disconnected', callback);
+  onRevealPartner(callback: (data: RevealPartnerEvent) => void): () => void {
+    return this.subscribe('reveal-partner', callback);
   }
 
-  onError(callback: (data: { message: string }) => void): void {
-    if (!this.socket) return;
-    this.socket.on('error', callback);
+  /** Subscribes to stats, replaying the most recent value if it already arrived. */
+  onStats(callback: (data: StatsEvent) => void): () => void {
+    this.statsHandlers.push(callback);
+    if (this.latestStats) callback(this.latestStats);
+
+    return () => {
+      this.statsHandlers = this.statsHandlers.filter((handler) => handler !== callback);
+    };
+  }
+
+  /** Fires when a human partner guessed you were a bot - you fooled them. */
+  onPartnerVerdict(callback: (data: { fooledPartner: boolean }) => void): () => void {
+    return this.subscribe('partner-verdict', callback);
+  }
+
+  onPartnerDisconnected(callback: () => void): () => void {
+    return this.subscribe('partner-disconnected', callback);
+  }
+
+  onError(callback: (data: { message: string }) => void): () => void {
+    return this.subscribe('error', callback);
   }
 
   onGuessResult(callback: (data: GuessResultEvent) => void): () => void {
@@ -152,12 +196,6 @@ export class SocketService {
         (handler) => handler !== callback
       );
     };
-  }
-
-  removeAllListeners(): void {
-    if (this.socket) {
-      this.socket.removeAllListeners();
-    }
   }
 
   isConnected(): boolean {

@@ -5,8 +5,18 @@ import { v4 as uuidv4 } from 'uuid';
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 
-// Premium plan pricing
-const PREMIUM_PRICE_ID = process.env.STRIPE_PREMIUM_PRICE_ID || '';
+// One Stripe price per plan. Create these in the Stripe dashboard; the monthly
+// and yearly ones are recurring prices, the lifetime one is a one-off.
+const PRICE_IDS: Record<PremiumPlan, string> = {
+  monthly: process.env.STRIPE_PRICE_MONTHLY || '',
+  yearly: process.env.STRIPE_PRICE_YEARLY || '',
+  lifetime: process.env.STRIPE_PRICE_LIFETIME || '',
+};
+
+export type PremiumPlan = 'monthly' | 'yearly' | 'lifetime';
+
+export const isPremiumPlan = (value: unknown): value is PremiumPlan =>
+  value === 'monthly' || value === 'yearly' || value === 'lifetime';
 
 export class StripeService {
   private stripe: Stripe;
@@ -16,12 +26,16 @@ export class StripeService {
       console.warn('STRIPE_SECRET_KEY not set. Payment features will not work.');
     }
     this.stripe = new Stripe(STRIPE_SECRET_KEY, {
-      apiVersion: '2024-12-18.acacia',
+      apiVersion: '2025-02-24.acacia',
     });
   }
 
-  async createCheckoutSession(userId: string, email: string): Promise<string> {
+  async createCheckoutSession(userId: string, email: string, plan: PremiumPlan): Promise<string> {
     try {
+      const priceId = PRICE_IDS[plan];
+      if (!priceId) {
+        throw new Error(`No Stripe price configured for the ${plan} plan`);
+      }
       // Check if user already has a customer ID
       const subscription = db.getSubscriptionByUserId(userId);
       let customerId = subscription?.stripe_customer_id;
@@ -37,22 +51,18 @@ export class StripeService {
         customerId = customer.id;
       }
 
-      // Create checkout session
+      // Lifetime is a one-off payment; the other two are recurring.
       const session = await this.stripe.checkout.sessions.create({
         customer: customerId,
-        mode: 'subscription',
+        mode: plan === 'lifetime' ? 'payment' : 'subscription',
         payment_method_types: ['card'],
-        line_items: [
-          {
-            price: PREMIUM_PRICE_ID,
-            quantity: 1,
-          },
-        ],
-        success_url: `${process.env.CLIENT_URL}/premium/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.CLIENT_URL}/premium/cancel`,
-        metadata: {
-          userId,
-        },
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${process.env.CLIENT_URL}/?premium=success`,
+        cancel_url: `${process.env.CLIENT_URL}/?premium=cancel`,
+        metadata: { userId, plan },
+        // Subscription webhooks arrive without the session metadata, so copy it
+        // onto the subscription itself or the handler cannot tell whose it is.
+        ...(plan === 'lifetime' ? {} : { subscription_data: { metadata: { userId, plan } } }),
       });
 
       return session.url!;
@@ -122,38 +132,37 @@ export class StripeService {
       return;
     }
 
-    const subscriptionId = session.subscription as string;
     const customerId = session.customer as string;
+    const subscriptionId = (session.subscription as string) || undefined;
 
-    // Retrieve subscription details
-    const stripeSubscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    // A lifetime unlock is a one-off payment: there is no subscription to read,
+    // and no period end, which is what makes it never expire.
+    let periodStart: number | undefined;
+    let periodEnd: number | undefined;
 
-    // Update or create subscription in database
-    const existingSubscription = db.getSubscriptionByUserId(userId);
-
-    if (existingSubscription) {
-      db.updateSubscription(existingSubscription.id, {
-        status: 'active',
-        plan: 'premium',
-        stripe_subscription_id: subscriptionId,
-        stripe_customer_id: customerId,
-        current_period_start: stripeSubscription.current_period_start * 1000,
-        current_period_end: stripeSubscription.current_period_end * 1000,
-      });
-    } else {
-      db.createSubscription({
-        id: uuidv4(),
-        user_id: userId,
-        status: 'active',
-        plan: 'premium',
-        stripe_subscription_id: subscriptionId,
-        stripe_customer_id: customerId,
-        current_period_start: stripeSubscription.current_period_start * 1000,
-        current_period_end: stripeSubscription.current_period_end * 1000,
-      });
+    if (subscriptionId) {
+      const stripeSubscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+      periodStart = stripeSubscription.current_period_start * 1000;
+      periodEnd = stripeSubscription.current_period_end * 1000;
     }
 
-    console.log(`Premium subscription activated for user ${userId}`);
+    const fields = {
+      status: 'active' as const,
+      plan: 'premium' as const,
+      stripe_subscription_id: subscriptionId,
+      stripe_customer_id: customerId,
+      current_period_start: periodStart,
+      current_period_end: periodEnd,
+    };
+
+    const existingSubscription = db.getSubscriptionByUserId(userId);
+    if (existingSubscription) {
+      db.updateSubscription(existingSubscription.id, fields);
+    } else {
+      db.createSubscription({ id: uuidv4(), user_id: userId, ...fields });
+    }
+
+    console.log(`Premium (${session.metadata?.plan ?? 'unknown'}) activated for user ${userId}`);
   }
 
   private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
@@ -190,6 +199,13 @@ export class StripeService {
     const existingSubscription = db.getSubscriptionByUserId(userId);
     if (!existingSubscription) {
       console.error(`No subscription found for user ${userId}`);
+      return;
+    }
+
+    // Never revoke a lifetime unlock: it has no stripe subscription attached,
+    // so a cancellation event for some other subscription must not touch it.
+    if (!existingSubscription.stripe_subscription_id) {
+      console.log(`Ignoring cancellation for user ${userId}: lifetime unlock`);
       return;
     }
 

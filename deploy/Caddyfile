@@ -1,0 +1,6 @@
+# Copy to /etc/caddy/Caddyfile, replace the domain, then: systemctl reload caddy
+# Caddy fetches and renews TLS certificates automatically and proxies
+# Socket.io's WebSocket upgrade without extra configuration.
+turing.example.com {
+	reverse_proxy localhost:3001
+}

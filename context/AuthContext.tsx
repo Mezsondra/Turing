@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { API_URL } from '../lib/api';
+import { getDeviceId } from '../lib/deviceId';
 
 interface User {
   id: string;
@@ -21,11 +23,12 @@ interface AuthContextType {
   register: (email: string, password: string, username?: string) => Promise<void>;
   logout: () => void;
   refreshSubscription: () => Promise<void>;
+  upgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -82,8 +85,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const data = await response.json();
       localStorage.setItem('auth_token', data.token);
-      setUser(data.user);
-      setSubscription(data.subscription);
+      // Reload so the websocket reconnects and the server re-resolves identity
+      // from the token instead of the guest device id.
+      window.location.reload();
     } catch (error: any) {
       throw error;
     }
@@ -96,7 +100,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, username }),
+        // The device id lets the server claim this guest's existing progress
+        // instead of starting the new account from zero.
+        body: JSON.stringify({ email, password, username, deviceId: getDeviceId() }),
       });
 
       if (!response.ok) {
@@ -106,8 +112,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const data = await response.json();
       localStorage.setItem('auth_token', data.token);
-      setUser(data.user);
-      setSubscription(data.subscription);
+      window.location.reload();
     } catch (error: any) {
       throw error;
     }
@@ -115,8 +120,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = () => {
     localStorage.removeItem('auth_token');
-    setUser(null);
-    setSubscription(null);
+    window.location.reload();
+  };
+
+  const upgrade = async (plan: 'monthly' | 'yearly' | 'lifetime') => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) throw new Error('You need an account before upgrading');
+
+    const response = await fetch(`${API_URL}/api/payment/create-checkout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ plan }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Could not start checkout');
+    }
+
+    const { url } = await response.json();
+    window.location.href = url;
   };
 
   const refreshSubscription = async () => {
@@ -149,6 +172,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     refreshSubscription,
+    upgrade,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

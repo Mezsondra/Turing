@@ -20,7 +20,7 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
   }, [countdown]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
       <div className="bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-slate-200 text-center mb-2">

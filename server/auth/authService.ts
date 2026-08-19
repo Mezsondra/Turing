@@ -3,7 +3,10 @@ import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { db, User } from '../database/db.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not set. Refusing to start with a guessable token secret.');
+}
 const JWT_EXPIRES_IN = '30d';
 
 export interface AuthTokenPayload {
@@ -15,6 +18,8 @@ export interface RegisterData {
   email: string;
   password: string;
   username?: string;
+  /** Device of the guest signing up, so their existing progress carries over. */
+  deviceId?: string;
 }
 
 export interface LoginData {
@@ -46,14 +51,28 @@ export class AuthService {
     // Hash password
     const passwordHash = await bcrypt.hash(data.password, 10);
 
-    // Create user
-    const userId = uuidv4();
-    const user = db.createUser({
-      id: userId,
-      email: data.email,
-      password_hash: passwordHash,
-      username: data.username,
-    });
+    // Claim this device's guest row if there is an unclaimed one, so the
+    // player keeps the score and streak they built before signing up.
+    let user =
+      data.deviceId
+        ? (() => {
+            const guest = db.getUserByDeviceId(data.deviceId!);
+            return guest && !guest.email
+              ? db.attachAccountToGuest(guest.id, data.email, passwordHash, data.username)
+              : undefined;
+          })()
+        : undefined;
+
+    if (!user) {
+      user = db.createUser({
+        id: uuidv4(),
+        email: data.email,
+        password_hash: passwordHash,
+        username: data.username,
+      });
+    }
+
+    const userId = user.id;
 
     // Create free subscription
     const subscriptionId = uuidv4();

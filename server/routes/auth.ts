@@ -8,13 +8,13 @@ const router = express.Router();
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, username } = req.body;
+    const { email, password, username, deviceId } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const result = await authService.register({ email, password, username });
+    const result = await authService.register({ email, password, username, deviceId });
     res.json(result);
   } catch (error: any) {
     console.error('Registration error:', error);

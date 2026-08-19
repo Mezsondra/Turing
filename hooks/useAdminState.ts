@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
+import { API_URL } from '../lib/api';
 
-const API_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:3001';
+
 
 type ProviderKey = 'gemini' | 'openai' | 'xai';
 

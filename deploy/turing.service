@@ -1,0 +1,18 @@
+# Copy to /etc/systemd/system/turing.service, then:
+#   systemctl daemon-reload && systemctl enable --now turing
+[Unit]
+Description=Turing Test Challenge
+After=network.target
+
+[Service]
+Type=simple
+User=turing
+WorkingDirectory=/srv/turing
+ExecStart=/usr/bin/env npm start
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

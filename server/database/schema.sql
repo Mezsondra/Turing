@@ -1,13 +1,21 @@
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  -- Guests get a row keyed by device_id with no email/password, so scores and
+  -- streaks persist without a signup. Registering later fills in the rest.
+  device_id TEXT UNIQUE,
+  email TEXT UNIQUE,
+  password_hash TEXT,
   username TEXT UNIQUE,
   score INTEGER DEFAULT 0,
   games_played INTEGER DEFAULT 0,
   games_won INTEGER DEFAULT 0,
   games_lost INTEGER DEFAULT 0,
+  -- Retention hooks: a run of correct guesses, and how often this player has
+  -- convinced a human partner that they were a bot.
+  current_streak INTEGER DEFAULT 0,
+  best_streak INTEGER DEFAULT 0,
+  times_fooled INTEGER DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -40,6 +48,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_device_id ON users(device_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_user_id ON game_sessions(user_id);

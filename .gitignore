@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
-# SQLite
-turing.db-shm
-turing.db-wal
+
+# Runtime config (contains API keys) and local database
+admin-config.json
+turing.db
+turing.db-*
+dist
