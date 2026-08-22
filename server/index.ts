@@ -16,12 +16,40 @@ import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
 import { adminConfigService } from './adminConfig.js';
 import { rateLimit, hitLimit } from './rateLimit.js';
+import { moderateMessage } from './moderation.js';
+import { computeDelays, forgetMatch } from './humanTiming.js';
+import {
+  personaFor,
+  forgetPersona,
+  noteIncoming,
+  shouldIgnoreMessage,
+  distractionPauseMs,
+} from './persona.js';
 import { db } from './database/db.js';
 import { authService } from './auth/authService.js';
 import { v4 as uuidv4 } from 'uuid';
 
 /** Free players see an interstitial every N completed rounds. */
 const AD_EVERY_N_ROUNDS = 3;
+
+/** Rounds a free player may complete per day. Premium is unlimited. */
+const FREE_ROUNDS_PER_DAY = 10;
+
+/** Midnight UTC today - the cap resets on a fixed clock, not a rolling window. */
+const startOfDayUtc = (): number => {
+  const now = new Date();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+};
+
+/**
+ * How many rounds this player has left today. Infinity for premium, and for
+ * players we cannot identify (no device id), who get no persistence anyway.
+ */
+const roundsLeftToday = (playerId: string | undefined): number => {
+  if (!playerId) return Infinity;
+  if (authService.isPremiumUser(playerId)) return Infinity;
+  return Math.max(0, FREE_ROUNDS_PER_DAY - db.getGameCountSince(playerId, startOfDayUtc()));
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -92,7 +120,10 @@ const clearRoundTimer = (matchId: string) => {
 const sendStats = (socketId: string, playerId: string) => {
   const player = db.getUserById(playerId);
   if (!player) return;
+  const remaining = roundsLeftToday(playerId);
+
   io.to(socketId).emit('stats', {
+    roundsLeftToday: Number.isFinite(remaining) ? remaining : null,
     score: player.score,
     gamesPlayed: player.games_played,
     gamesWon: player.games_won,
@@ -103,25 +134,70 @@ const sendStats = (socketId: string, playerId: string) => {
   });
 };
 
-// Emit an AI message the way a human would send it: think, then type, then send.
-const sendAsIfTyping = (socketId: string, text: string) => {
-  const thinkingDelay = 800 + Math.random() * 1200;
-  const typingDuration = Math.min(4500, Math.max(1200, text.length * 30));
+// Emit an AI message the way a human would send it: read, think, type, send.
+/**
+ * Some people send one considered message; others fire off two in a row. Split
+ * on a sentence boundary when this opponent is a burster and the reply is long
+ * enough to make two messages look natural.
+ */
+const splitForBurst = (matchId: string, text: string): string[] => {
+  const { burstChance } = personaFor(matchId);
+  if (!burstChance || Math.random() > burstChance || text.length < 25) return [text];
+
+  const parts = text.split(/(?<=[.!?])\s+|\s+(?=but |and |also |tho )/i).filter(Boolean);
+  if (parts.length < 2) return [text];
+
+  // Two messages, not five: keep the first sentence, lump the rest together.
+  return [parts[0].trim(), parts.slice(1).join(' ').trim()].filter(Boolean);
+};
+
+const sendAsIfTyping = (
+  socketId: string,
+  matchId: string,
+  text: string,
+  context: { incomingText?: string; elapsedMs?: number; distractedMs?: number } = {}
+) => {
+  const { preTypingMs, typingMs } = computeDelays({
+    matchId,
+    replyText: text,
+    incomingText: context.incomingText,
+    elapsedMs: context.elapsedMs,
+    distractedMs: context.distractedMs,
+  });
+
+  const chunks = splitForBurst(matchId, text);
 
   setTimeout(() => {
     io.to(socketId).emit('partner-typing', { isTyping: true });
-    setTimeout(() => {
-      io.to(socketId).emit('message', { text, fromAI: true });
-      io.to(socketId).emit('partner-typing', { isTyping: false });
-    }, typingDuration);
-  }, thinkingDelay);
+
+    // Each chunk takes its own share of the typing time, with a short gap
+    // between them - the pause while someone hits send and keeps going.
+    let elapsed = 0;
+    chunks.forEach((chunk, index) => {
+      const share = typingMs * (chunk.length / text.length);
+      elapsed += share;
+
+      setTimeout(() => {
+        io.to(socketId).emit('message', { text: chunk, fromAI: true });
+
+        const isLast = index === chunks.length - 1;
+        io.to(socketId).emit('partner-typing', { isTyping: !isLast });
+      }, elapsed);
+
+      elapsed += 400 + Math.random() * 600;
+    });
+  }, preTypingMs);
 };
 
 // Single place where a match becomes visible to players. Previously this lived
 // inside the join-queue handler, so matches created by the AI-fallback timeout
 // were never announced and those players waited forever.
 matchmakingService.onMatch(async (match) => {
-  const roundDurationSeconds = adminConfigService.getConversationDurationSeconds();
+  // Vary the round a little around the configured length. Always exactly 60
+  // seconds reads as a game timer rather than a conversation, and both players
+  // in a human match share this value because it is computed once, here.
+  const configuredSeconds = adminConfigService.getConversationDurationSeconds();
+  const roundDurationSeconds = Math.round(configuredSeconds * (0.85 + Math.random() * 0.4));
   const roundEndsAt = Date.now() + roundDurationSeconds * 1000;
   const payload = { matchId: match.id, partnerType: 'unknown', roundDurationSeconds, roundEndsAt };
 
@@ -135,17 +211,31 @@ matchmakingService.onMatch(async (match) => {
 
   if (!match.isAiMatch) return;
 
+  // A human partner does not always message first. If the AI always opens,
+  // "did they speak first?" becomes a perfect tell - so sometimes it waits.
+  if (!personaFor(match.id).opensConversation) return;
+
   try {
+    const startedAt = Date.now();
     const opening = await aiService.initializeConversation(match.id);
-    sendAsIfTyping(match.user1.socketId, opening);
+    sendAsIfTyping(match.user1.socketId, match.id, opening, { elapsedMs: Date.now() - startedAt });
   } catch (error) {
     console.error('Error initializing AI conversation:', error);
-    io.to(match.user1.socketId).emit('error', { message: 'Failed to initialize chat' });
+    // The match is unusable: drop it so the player can retry into a fresh one.
+    matchmakingService.removeUser(match.user1.id);
+    clearRoundTimer(match.id);
+    io.to(match.user1.socketId).emit('error', {
+      code: 'ai_unavailable',
+      message: 'The AI opponent is unavailable right now.',
+    });
   }
 });
 
 matchmakingService.onMatchFailure((user) => {
-  io.to(user.socketId).emit('error', { message: 'Could not start a chat. Please try again.' });
+  io.to(user.socketId).emit('error', {
+    code: 'ai_unavailable',
+    message: 'Could not start a chat. Please try again.',
+  });
 });
 
 io.on('connection', async (socket: Socket) => {
@@ -187,6 +277,13 @@ io.on('connection', async (socket: Socket) => {
         return;
       }
 
+      // Server-enforced: a client cannot grant itself more rounds.
+      const playerId = socketToPlayer.get(socket.id);
+      if (roundsLeftToday(playerId) <= 0) {
+        socket.emit('daily-limit-reached', { limit: FREE_ROUNDS_PER_DAY });
+        return;
+      }
+
       console.log(`Socket ${socket.id} joining queue with language: ${language}`);
 
       // The client keeps one socket across rounds, so clear out the previous
@@ -199,7 +296,7 @@ io.on('connection', async (socket: Socket) => {
 
       const user: User = {
         id: socket.id,
-        playerId: socketToPlayer.get(socket.id) || '',
+        playerId: playerId || '',
         socketId: socket.id,
         language,
         joinedAt: Date.now(),
@@ -246,17 +343,35 @@ io.on('connection', async (socket: Socket) => {
       }
 
       if (match.isAiMatch) {
+        // A distracted person sometimes just does not answer. Skipping the API
+        // call entirely is also the honest thing to do: they never read it.
+        if (shouldIgnoreMessage(match.id, noteIncoming(match.id))) {
+          console.log(`Match ${match.id}: opponent ignored a message`);
+          return;
+        }
+
         try {
+          const startedAt = Date.now();
           const aiResponse = await aiService.sendMessage(match.id, message);
           // Re-check: the player may have disconnected while the API call ran.
           if (!matchmakingService.getMatch(match.id)) return;
-          sendAsIfTyping(socket.id, aiResponse);
+          sendAsIfTyping(socket.id, match.id, aiResponse, {
+            incomingText: message,
+            elapsedMs: Date.now() - startedAt,
+            distractedMs: distractionPauseMs(match.id),
+          });
         } catch (error) {
           console.error('Error getting AI response:', error);
           socket.emit('partner-typing', { isTyping: false });
           socket.emit('error', { message: 'Failed to get response' });
         }
       } else {
+        const verdict = moderateMessage(message);
+        if (!verdict.allowed) {
+          socket.emit('message-blocked', { reason: verdict.reason });
+          return;
+        }
+
         const partner = matchmakingService.getPartnerInMatch(match.id, userId);
         if (partner) {
           io.to(partner.socketId).emit('message', { text: message, fromAI: false });
@@ -351,6 +466,8 @@ io.on('connection', async (socket: Socket) => {
         sendStats(partner.socketId, partner.playerId);
       }
 
+      sendStats(socket.id, playerId);
+
       const player = db.getUserById(playerId);
       const roundsPlayed = player?.games_played ?? 0;
       const shouldShowAd =
@@ -376,6 +493,61 @@ io.on('connection', async (socket: Socket) => {
     }
   });
 
+  // Report a partner. Required by app store UGC rules, and the transcript is
+  // stored with the report so a human can actually review it.
+  socket.on('report-partner', ({ matchId, reason, transcript }: { matchId: string; reason: string; transcript?: string }) => {
+    try {
+      const playerId = socketToPlayer.get(socket.id);
+      const userId = socketToUser.get(socket.id);
+      if (!playerId || !userId) return;
+
+      if (hitLimit(`report:${socket.id}`, 5, 60_000)) {
+        socket.emit('error', { message: 'Too many reports. Please slow down.' });
+        return;
+      }
+
+      const match = matchmakingService.getMatchForUser(userId);
+      if (!match || match.id !== matchId) return;
+
+      const partner = matchmakingService.getPartnerInMatch(match.id, userId);
+
+      db.createReport({
+        id: uuidv4(),
+        reporter_id: playerId,
+        reported_id: partner?.playerId || 'AI',
+        match_id: match.id,
+        reason: String(reason || 'unspecified').slice(0, 200),
+        transcript: typeof transcript === 'string' ? transcript.slice(0, 5000) : undefined,
+      });
+
+      // Reporting implies you do not want to meet them again.
+      if (partner?.playerId) db.blockPlayer(playerId, partner.playerId);
+
+      socket.emit('report-received');
+    } catch (error) {
+      console.error('Error handling report:', error);
+    }
+  });
+
+  socket.on('block-partner', ({ matchId }: { matchId: string }) => {
+    try {
+      const playerId = socketToPlayer.get(socket.id);
+      const userId = socketToUser.get(socket.id);
+      if (!playerId || !userId) return;
+
+      const match = matchmakingService.getMatchForUser(userId);
+      if (!match || match.id !== matchId) return;
+
+      const partner = matchmakingService.getPartnerInMatch(match.id, userId);
+      if (partner?.playerId) {
+        db.blockPlayer(playerId, partner.playerId);
+        socket.emit('report-received');
+      }
+    } catch (error) {
+      console.error('Error handling block:', error);
+    }
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`Client disconnected: ${socket.id}`);
@@ -392,7 +564,11 @@ io.on('connection', async (socket: Socket) => {
       }
 
       // Remove user from matchmaking
-      if (match) clearRoundTimer(match.id);
+      if (match) {
+        clearRoundTimer(match.id);
+        forgetMatch(match.id);
+        forgetPersona(match.id);
+      }
       matchmakingService.removeUser(userId);
       socketToUser.delete(socket.id);
       socketToPlayer.delete(socket.id);
