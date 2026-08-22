@@ -1,6 +1,8 @@
 import { GoogleGenAI, Chat, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { AIProvider, Language } from './baseProvider.js';
 import { adminConfigService } from '../adminConfig.js';
+import { withRetry } from './retry.js';
+import { personaFor } from '../persona.js';
 
 export class GeminiProvider implements AIProvider {
   public readonly name = 'gemini';
@@ -9,7 +11,7 @@ export class GeminiProvider implements AIProvider {
   private apiKey: string;
   private model: string;
 
-  constructor(apiKey: string, model: string = 'gemini-2.5-flash') {
+  constructor(apiKey: string, model: string = 'gemini-3.6-flash') {
     this.apiKey = apiKey;
     this.model = model;
   }
@@ -17,8 +19,9 @@ export class GeminiProvider implements AIProvider {
   async createSession(matchId: string, language: Language): Promise<void> {
     const ai = new GoogleGenAI({ apiKey: this.apiKey });
 
-    // Get prompt from admin config
-    const systemInstruction = adminConfigService.getPrompt(language);
+    // Admin-configured rules, plus a fresh personality for this match so no two
+    // AI opponents read the same.
+    const systemInstruction = adminConfigService.getPrompt(language) + personaFor(matchId).instruction;
 
     const chat = ai.chats.create({
       model: this.model,
@@ -57,7 +60,7 @@ export class GeminiProvider implements AIProvider {
     }
 
     try {
-      const response = await session.sendMessage({ message });
+      const response = await withRetry(() => session.sendMessage({ message }));
       return response.text;
     } catch (error) {
       console.error(`Error getting Gemini response for match ${matchId}:`, error);
@@ -74,9 +77,7 @@ export class GeminiProvider implements AIProvider {
     try {
       const language = this.sessionLanguages.get(matchId) || 'en';
       const initialPrompt = adminConfigService.getInitialPrompt(language);
-      const response = await session.sendMessage({
-        message: initialPrompt
-      });
+      const response = await withRetry(() => session.sendMessage({ message: initialPrompt }));
       return response.text;
     } catch (error) {
       console.error(`Error initializing Gemini conversation for match ${matchId}:`, error);

@@ -1,5 +1,7 @@
 import { AIProvider, Language } from './baseProvider.js';
 import { adminConfigService } from '../adminConfig.js';
+import { withRetry } from './retry.js';
+import { personaFor } from '../persona.js';
 
 interface OpenAIMessage {
   role: 'system' | 'user' | 'assistant';
@@ -30,7 +32,7 @@ export class OpenAIProvider implements AIProvider {
 
   async createSession(matchId: string, language: Language): Promise<void> {
     // Get prompt from admin config
-    const systemInstruction = adminConfigService.getPrompt(language);
+    const systemInstruction = adminConfigService.getPrompt(language) + personaFor(matchId).instruction;
 
     const messages: OpenAIMessage[] = [
       {
@@ -56,26 +58,31 @@ export class OpenAIProvider implements AIProvider {
     });
 
     try {
-      const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.model,
-          messages: session,
-          temperature: 0.9,
-          max_tokens: 150,
-        }),
+      const data: OpenAIResponse = await withRetry(async () => {
+        const response = await fetch(`${this.baseURL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: session,
+            temperature: 0.9,
+            max_tokens: 150,
+          }),
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          // Carry the status so withRetry can tell transient from permanent.
+          throw Object.assign(new Error(`OpenAI API error: ${response.status} - ${body}`), {
+            status: response.status,
+          });
+        }
+
+        return response.json();
       });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`OpenAI API error: ${response.status} - ${error}`);
-      }
-
-      const data: OpenAIResponse = await response.json();
       const assistantMessage = data.choices[0].message.content;
 
       // Add assistant response to history
