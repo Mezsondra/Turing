@@ -7,6 +7,7 @@ import { useTranslations } from '../hooks/useTranslations';
 import { playSound } from '../lib/audio';
 import { triggerVibration } from '../lib/vibration';
 import { socketService } from '../services/socketService';
+import ReportModal from './ReportModal';
 
 interface ChatScreenProps {
   onTimeUp: (actualPartner: 'HUMAN' | 'AI', matchId: string) => void;
@@ -19,6 +20,10 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'searching' | 'matched' | 'error'>('connecting');
   const [roundEndsAt, setRoundEndsAt] = useState<number | null>(null);
+  const [matchId, setMatchId] = useState<string | null>(null);
+  const [isReporting, setIsReporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const onTimeUpRef = useRef(onTimeUp);
@@ -49,8 +54,9 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
             if (mounted) setConnectionStatus('searching');
           }),
 
-          socketService.onMatched(({ roundEndsAt: endsAt, roundDurationSeconds }) => {
+          socketService.onMatched(({ matchId: newMatchId, roundEndsAt: endsAt, roundDurationSeconds }) => {
             if (!mounted) return;
+            setMatchId(newMatchId);
             setRoundEndsAt(endsAt ?? Date.now() + (roundDurationSeconds ?? 60) * 1000);
             setConnectionStatus('matched');
             setMessages([]);
@@ -82,9 +88,20 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
             }
           }),
 
-          socketService.onError(({ message }) => {
+          // The server refused to deliver a message: tell the sender why,
+          // rather than letting it silently vanish.
+          socketService.onMessageBlocked(({ reason }) => {
+            if (!mounted) return;
+            setNotice(reason === 'contact' ? t('message_blocked_contact') : t('message_blocked_abuse'));
+            setTimeout(() => mounted && setNotice(null), 4000);
+          }),
+
+          socketService.onError(({ message, code }) => {
             if (!mounted) return;
             console.error('Socket error:', message);
+            // Say what actually went wrong. Reporting an AI outage as a
+            // connection failure sends players debugging the wrong thing.
+            setErrorMessage(code === 'ai_unavailable' ? t('ai_unavailable') : message);
             setConnectionStatus('error');
           })
         );
@@ -165,14 +182,25 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
   }
 
   if (connectionStatus === 'error') {
+    const retry = () => {
+      setErrorMessage(null);
+      // Still connected in most cases, so re-queue rather than reload.
+      if (socketService.isConnected()) {
+        setConnectionStatus('searching');
+        socketService.joinQueue(language);
+      } else {
+        window.location.reload();
+      }
+    };
+
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
-        <p className="text-xl text-red-400">Failed to connect to server</p>
+        <p className="text-xl text-red-400 max-w-sm">{errorMessage || t('connection_failed')}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={retry}
           className="mt-4 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-6 rounded-full"
         >
-          Retry
+          {t('retry')}
         </button>
       </div>
     );
@@ -182,7 +210,15 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     <div className="flex flex-col h-screen bg-slate-800">
       <header className="bg-slate-900/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-slate-700 sticky top-0">
         <h2 className="text-xl font-bold text-slate-200">{t('score')}: <span className="text-cyan-400">{score}</span></h2>
-        {roundEndsAt && <Timer endsAt={roundEndsAt} />}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsReporting(true)}
+            className="text-slate-400 hover:text-red-400 text-sm font-semibold transition-colors"
+          >
+            ⚑ {t('report')}
+          </button>
+          {roundEndsAt && <Timer endsAt={roundEndsAt} />}
+        </div>
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
@@ -204,6 +240,12 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
         )}
         <div ref={messagesEndRef} />
       </main>
+
+      {notice && (
+        <div className="bg-amber-500/15 border-t border-amber-500/40 text-amber-300 text-sm text-center py-2 px-4">
+          {notice}
+        </div>
+      )}
 
       <footer className="bg-slate-900 p-4 sticky bottom-0 border-t border-slate-700">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
@@ -228,6 +270,19 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
           </button>
         </form>
       </footer>
+
+      {isReporting && (
+        <ReportModal
+          onClose={() => setIsReporting(false)}
+          onSubmit={(reason) => {
+            if (matchId) {
+              // Send the transcript so a moderator can see the context.
+              const transcript = messages.map((m) => `${m.role}: ${m.text}`).join('\n');
+              socketService.reportPartner(matchId, reason, transcript);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

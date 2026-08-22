@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import WelcomeScreen from './components/WelcomeScreen';
 import ChatScreen from './components/ChatScreen';
 import GuessScreen from './components/GuessScreen';
@@ -7,6 +7,7 @@ import AdminPage from './components/AdminPage';
 import AdModal from './components/AdModal';
 import PremiumModal, { PremiumPlan } from './components/PremiumModal';
 import AuthModal from './components/AuthModal';
+import AgeGate, { hasConfirmedAge } from './components/AgeGate';
 import { useAuth } from './context/AuthContext';
 import { useTranslations } from './hooks/useTranslations';
 import { GameState } from './types';
@@ -17,6 +18,13 @@ const App: React.FC = () => {
   const { t } = useTranslations();
   const [modal, setModal] = useState<'none' | 'ad' | 'premium' | 'auth'>('none');
   const [pendingAd, setPendingAd] = useState(false);
+  const [roundsLeft, setRoundsLeft] = useState<number | null>(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(hasConfirmedAge);
+
+  // Token verification resolves after mount, so isAuthenticated flips to true
+  // without a re-render of the socket effect. Read it through a ref.
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  useEffect(() => { isAuthenticatedRef.current = isAuthenticated; }, [isAuthenticated]);
   const [gameState, setGameState] = useState<GameState>(GameState.WELCOME);
   const [lastGuessCorrect, setLastGuessCorrect] = useState(false);
   const [partnerType, setPartnerType] = useState<'HUMAN' | 'AI'>('AI');
@@ -39,7 +47,16 @@ const App: React.FC = () => {
     // show the player's streak - which is what makes it worth coming back for.
     socketService.connect().catch((error) => console.error('Connection failed:', error));
 
-    const unsubscribeStats = socketService.onStats(setScoreData);
+    const unsubscribeStats = socketService.onStats((stats) => {
+      setScoreData(stats);
+      setRoundsLeft(stats.roundsLeftToday);
+    });
+
+    // Out of free rounds: send them to the upgrade path rather than a dead end.
+    const unsubscribeLimit = socketService.onDailyLimit(() => {
+      setGameState(GameState.WELCOME);
+      setModal(isAuthenticatedRef.current ? 'premium' : 'auth');
+    });
 
     // A human partner may declare you a bot before or after your own guess
     // lands, so this is tracked separately rather than folded into the result.
@@ -69,6 +86,7 @@ const App: React.FC = () => {
 
     return () => {
       unsubscribeStats();
+      unsubscribeLimit();
       unsubscribeVerdict();
       unsubscribeGuess();
     };
@@ -147,6 +165,7 @@ const App: React.FC = () => {
             currentStreak={scoreData.currentStreak}
             gamesPlayed={scoreData.gamesPlayed}
             isPremium={isPremium}
+            roundsLeft={roundsLeft}
             onOpenAccount={() => setModal(isAuthenticated ? 'premium' : 'auth')}
           />
         );
@@ -158,6 +177,11 @@ const App: React.FC = () => {
 
   if (isAdminPage) {
     return <AdminPage />;
+  }
+
+  // Strangers in unmoderated live chat: confirm age before any of it is reachable.
+  if (!ageConfirmed) {
+    return <AgeGate onConfirm={() => setAgeConfirmed(true)} />;
   }
 
   return (

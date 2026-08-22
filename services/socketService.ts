@@ -13,6 +13,8 @@ interface MatchedEvent {
 }
 
 export interface StatsEvent {
+  /** Rounds remaining today, or null when unlimited (premium). */
+  roundsLeftToday: number | null;
   score: number;
   gamesPlayed: number;
   gamesWon: number;
@@ -168,6 +170,28 @@ export class SocketService {
     };
   }
 
+  reportPartner(matchId: string, reason: string, transcript?: string): void {
+    this.socket?.emit('report-partner', { matchId, reason, transcript });
+  }
+
+  blockPartner(matchId: string): void {
+    this.socket?.emit('block-partner', { matchId });
+  }
+
+  /** Fires when the server refused to deliver a message. */
+  onMessageBlocked(callback: (data: { reason?: string }) => void): () => void {
+    return this.subscribe('message-blocked', callback);
+  }
+
+  onReportReceived(callback: () => void): () => void {
+    return this.subscribe('report-received', callback);
+  }
+
+  /** Fires when a free player has used up today's rounds. */
+  onDailyLimit(callback: (data: { limit: number }) => void): () => void {
+    return this.subscribe('daily-limit-reached', callback);
+  }
+
   /** Fires when a human partner guessed you were a bot - you fooled them. */
   onPartnerVerdict(callback: (data: { fooledPartner: boolean }) => void): () => void {
     return this.subscribe('partner-verdict', callback);
@@ -177,7 +201,7 @@ export class SocketService {
     return this.subscribe('partner-disconnected', callback);
   }
 
-  onError(callback: (data: { message: string }) => void): () => void {
+  onError(callback: (data: { message: string; code?: string }) => void): () => void {
     return this.subscribe('error', callback);
   }
 

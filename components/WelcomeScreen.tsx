@@ -8,6 +8,7 @@ interface WelcomeScreenProps {
   currentStreak?: number;
   gamesPlayed?: number;
   isPremium?: boolean;
+  roundsLeft?: number | null;
   onOpenAccount?: () => void;
 }
 
@@ -17,6 +18,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   currentStreak = 0,
   gamesPlayed = 0,
   isPremium = false,
+  roundsLeft = null,
   onOpenAccount,
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -61,6 +63,12 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 </div>
               )}
             </div>
+          )}
+
+          {roundsLeft !== null && roundsLeft <= 3 && (
+            <p className={`mb-4 text-sm ${roundsLeft === 0 ? 'text-red-400' : 'text-amber-400'}`}>
+              {roundsLeft === 0 ? t('no_rounds_left') : `${roundsLeft} ${t('rounds_left_today')}`}
+            </p>
           )}
 
           <button

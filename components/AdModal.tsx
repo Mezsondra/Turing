@@ -8,8 +8,14 @@ interface AdModalProps {
   onUpgrade?: () => void;
 }
 
+// No ad network wired up yet (AdSense refuses thin-content sites, and this
+// game's web build has almost no text). Until one exists, this slot sells
+// Premium instead of rendering an empty frame.
+const hasAdNetwork = Boolean(import.meta.env.VITE_ADSENSE_CLIENT_ID);
+
 const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, onUpgrade }) => {
-  const [countdown, setCountdown] = useState(10);
+  // Nothing to wait for when there is no ad to watch.
+  const [countdown, setCountdown] = useState(hasAdNetwork ? 10 : 0);
   const { t } = useTranslations();
 
   useEffect(() => {
@@ -24,20 +30,28 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
       <div className="bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-slate-200 text-center mb-2">
-            {t('ad_break_title') || 'Quick Ad Break'}
+            {hasAdNetwork ? t('ad_break_title') : t('support_us_title')}
           </h2>
           <p className="text-slate-400 text-center text-sm">
-            {t('ad_break_description') || 'Support us by watching this ad, or upgrade to Premium for ad-free experience'}
+            {hasAdNetwork ? t('ad_break_description') : t('support_us_desc')}
           </p>
         </div>
 
         <div className="my-6">
-          <AdSenseAd
-            adSlot="1234567890"
-            adFormat="rectangle"
-            fullWidthResponsive={false}
-            style={{ display: 'block', minHeight: '250px' }}
-          />
+          {hasAdNetwork ? (
+            <AdSenseAd
+              adSlot="1234567890"
+              adFormat="rectangle"
+              fullWidthResponsive={false}
+              style={{ display: 'block', minHeight: '250px' }}
+            />
+          ) : (
+            <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-3">⭐</div>
+              <p className="text-slate-200 font-semibold mb-1">{t('upgrade_to_premium')}</p>
+              <p className="text-slate-400 text-sm">{t('no_ads_desc')}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
