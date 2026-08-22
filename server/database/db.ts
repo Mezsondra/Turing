@@ -336,6 +336,14 @@ export class DatabaseService {
     return result?.count ?? 0;
   }
 
+  /** Rounds this player has completed since a given moment. Used for the daily cap. */
+  getGameCountSince(userId: string, since: number): number {
+    const stmt = this.db.prepare(
+      'SELECT COUNT(*) as count FROM game_sessions WHERE user_id = ? AND played_at >= ?'
+    );
+    return (stmt.get(userId, since) as { count: number }).count;
+  }
+
   getTotalGameCount(userId: string): number {
     const stmt = this.db.prepare('SELECT COUNT(*) as count FROM game_sessions WHERE user_id = ?');
     const result = stmt.get(userId) as { count: number };
@@ -355,6 +363,77 @@ export class DatabaseService {
     const accuracy = result.total > 0 ? (result.correct / result.total) * 100 : 0;
 
     return { ...result, accuracy };
+  }
+
+  // --- Safety: reports, blocks, and account deletion ---
+
+  createReport(report: {
+    id: string;
+    reporter_id: string;
+    reported_id: string;
+    match_id: string;
+    reason: string;
+    transcript?: string;
+  }): void {
+    this.db
+      .prepare(
+        `INSERT INTO reports (id, reporter_id, reported_id, match_id, reason, transcript, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        report.id,
+        report.reporter_id,
+        report.reported_id,
+        report.match_id,
+        report.reason,
+        report.transcript || null,
+        Date.now()
+      );
+  }
+
+  getOpenReports(limit = 100): Array<Record<string, unknown>> {
+    return this.db
+      .prepare(`SELECT * FROM reports WHERE status = 'open' ORDER BY created_at DESC LIMIT ?`)
+      .all(limit) as Array<Record<string, unknown>>;
+  }
+
+  setReportStatus(id: string, status: 'open' | 'reviewed' | 'actioned'): void {
+    this.db.prepare('UPDATE reports SET status = ? WHERE id = ?').run(status, id);
+  }
+
+  blockPlayer(blockerId: string, blockedId: string): void {
+    this.db
+      .prepare('INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)')
+      .run(blockerId, blockedId, Date.now());
+  }
+
+  /** True if either player has blocked the other - blocks apply both ways for matchmaking. */
+  areBlocked(playerA: string, playerB: string): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT 1 FROM blocks
+         WHERE (blocker_id = ? AND blocked_id = ?) OR (blocker_id = ? AND blocked_id = ?)
+         LIMIT 1`
+      )
+      .get(playerA, playerB, playerB, playerA);
+    return Boolean(row);
+  }
+
+  /**
+   * Permanently deletes a player and everything attached to them. Apple
+   * requires in-app account deletion once an app offers accounts.
+   * Reports filed *against* this player are kept, deliberately: they are
+   * moderation records, and deleting an account must not erase evidence.
+   */
+  deleteUser(userId: string): void {
+    const remove = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM game_sessions WHERE user_id = ?').run(userId);
+      this.db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
+      this.db.prepare('DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?').run(userId, userId);
+      this.db.prepare('DELETE FROM reports WHERE reporter_id = ?').run(userId);
+      this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+    remove();
   }
 
   close(): void {

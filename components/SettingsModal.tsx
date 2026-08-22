@@ -1,6 +1,8 @@
 import React from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslations } from '../hooks/useTranslations';
+import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../lib/api';
 import ToggleSwitch from './ToggleSwitch';
 
 interface SettingsModalProps {
@@ -14,6 +16,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     isVibrationEnabled, setIsVibrationEnabled 
   } = useSettings();
   const { t } = useTranslations();
+  const { isAuthenticated, user, logout } = useAuth();
+
+  // Apple requires account deletion to be reachable in-app, not by emailing support.
+  const deleteAccount = async () => {
+    if (!window.confirm(t('delete_account_confirm'))) return;
+
+    const token = localStorage.getItem('auth_token');
+    const response = await fetch(`${API_URL}/api/auth/account`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (response.ok) {
+      alert(t('delete_account_done'));
+      logout(); // reloads the page
+    }
+  };
 
   return (
     <div 
@@ -61,6 +80,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
             checked={isVibrationEnabled}
             onChange={setIsVibrationEnabled}
           />
+
+          {isAuthenticated && (
+            <div className="border-t border-slate-700 pt-4 space-y-3">
+              <p className="text-slate-400 text-sm truncate">{user?.email}</p>
+              <button
+                onClick={logout}
+                className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded-lg"
+              >
+                {t('sign_out')}
+              </button>
+              <button
+                onClick={deleteAccount}
+                className="w-full text-red-400 hover:text-red-300 text-sm py-1"
+              >
+                {t('delete_account')}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

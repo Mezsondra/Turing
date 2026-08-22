@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { timingSafeEqual } from 'crypto';
 import { adminConfigService } from '../adminConfig.js';
 import { AIProviderFactory } from '../aiService.js';
+import { db } from '../database/db.js';
 import { rateLimit } from '../rateLimit.js';
 
 const router = Router();
@@ -166,6 +167,31 @@ router.put('/initial-prompts/:languageCode', requireAdmin, (req: Request, res: R
   } catch (error) {
     console.error('Error updating initial prompt:', error);
     res.status(500).json({ success: false, error: 'Failed to update initial prompt' });
+  }
+});
+
+// Moderation queue. App stores expect abuse reports to be acted on within 24h,
+// which requires somewhere to actually see them.
+router.get('/reports', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, reports: db.getOpenReports() });
+  } catch (error) {
+    console.error('Error listing reports:', error);
+    res.status(500).json({ success: false, error: 'Failed to list reports' });
+  }
+});
+
+router.put('/reports/:id', requireAdmin, (req: Request, res: Response) => {
+  try {
+    const { status } = req.body;
+    if (status !== 'reviewed' && status !== 'actioned') {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+    db.setReportStatus(req.params.id, status);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating report:', error);
+    res.status(500).json({ success: false, error: 'Failed to update report' });
   }
 });
 

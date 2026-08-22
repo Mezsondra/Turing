@@ -67,4 +67,16 @@ router.get('/verify', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// Permanent account deletion. Apple requires this to be reachable in-app once
+// an app offers accounts; it is not optional.
+router.delete('/account', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    db.deleteUser(req.userId!);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Account deletion error:', error);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 export default router;

@@ -53,3 +53,29 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_user_id ON game_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_game_sessions_played_at ON game_sessions(played_at);
+
+-- Abuse reports. Required by app store UGC rules (Apple Guideline 1.2), which
+-- expect a way to report content and a 24h response commitment.
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  reporter_id TEXT NOT NULL,
+  reported_id TEXT NOT NULL,
+  match_id TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  transcript TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'reviewed', 'actioned')),
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- One-way blocks: matchmaking must never pair these two again.
+CREATE TABLE IF NOT EXISTS blocks (
+  blocker_id TEXT NOT NULL,
+  blocked_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id),
+  FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_blocks_blocker ON blocks(blocker_id);

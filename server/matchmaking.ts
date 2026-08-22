@@ -2,6 +2,7 @@ import { User, Match } from './types.js';
 import { aiService } from './aiService.js';
 import { v4 as uuidv4 } from 'uuid';
 import { adminConfigService } from './adminConfig.js';
+import { db } from './database/db.js';
 
 export class MatchmakingService {
   private waitingQueue: User[] = [];
@@ -55,7 +56,11 @@ export class MatchmakingService {
 
     // Try to find another waiting user with same language
     const otherUserIndex = this.waitingQueue.findIndex(
-      u => u.id !== user.id && u.language === user.language
+      u =>
+        u.id !== user.id &&
+        u.language === user.language &&
+        // Never re-pair players who blocked each other.
+        !(u.playerId && user.playerId && db.areBlocked(user.playerId, u.playerId))
     );
 
     if (otherUserIndex !== -1) {
