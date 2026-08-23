@@ -135,9 +135,17 @@ one service to run on one port.
 git clone <repo> /srv/turing && cd /srv/turing
 npm ci          # build on the server: better-sqlite3 is a native module and a
                 # macOS build will not load on Linux
-npm run build   # emits dist/, which the server serves
 cp .env.local.example .env.local && $EDITOR .env.local
+npm run build   # emits dist/, which the server serves
 ```
+
+Edit `.env.local` **before** building. `VITE_*` variables are compiled into the
+bundle, not read at runtime, so changing one means running `npm run build`
+again. In particular leave `VITE_SERVER_URL` unset: the server serves the
+frontend from its own origin. If the bundle carries `http://localhost:3001`
+(`grep -o localhost:3001 dist/assets/*.js`) the browser will call your laptop
+instead of the server and every page, admin included, reports "Failed to
+connect to server". Set `CLIENT_URL` to your public HTTPS URL.
 
 Then use the files in [deploy/](deploy/):
 
