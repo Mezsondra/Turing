@@ -10,7 +10,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx --env-file .env.local server/index.ts",
-    "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts && tsx server/retry.test.ts && tsx server/moderation.test.ts && tsx server/safety.test.ts && tsx server/humanTiming.test.ts && tsx server/persona.test.ts"
+    "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts && tsx server/retry.test.ts && tsx server/moderation.test.ts && tsx server/safety.test.ts && tsx server/humanTiming.test.ts && tsx server/persona.test.ts && tsx server/subscriptionStatus.test.ts"
   },
   "dependencies": {
     "@google/genai": "^1.28.0",

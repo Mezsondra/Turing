@@ -18,6 +18,31 @@ export type PremiumPlan = 'monthly' | 'yearly' | 'lifetime';
 export const isPremiumPlan = (value: unknown): value is PremiumPlan =>
   value === 'monthly' || value === 'yearly' || value === 'lifetime';
 
+// Stripe has eight subscription statuses; only some of them mean "stop serving
+// premium". Collapsing every non-active one to canceled revoked access from
+// customers who had actually paid: a new subscription is `incomplete` until the
+// first charge (or the 3DS challenge) clears, and `past_due` is Stripe retrying
+// the card, not a cancellation. Returns null for "no decision yet, leave the
+// row alone" - including for any status Stripe adds later, since inventing a
+// downgrade from an unknown state is how paying users lose access.
+export const subscriptionStatus = (
+  stripeStatus: Stripe.Subscription.Status
+): 'active' | 'trialing' | 'canceled' | null => {
+  switch (stripeStatus) {
+    case 'active':
+    case 'past_due': // dunning: keep access while Stripe retries the card
+      return 'active';
+    case 'trialing':
+      return 'trialing';
+    case 'canceled':
+    case 'unpaid':
+    case 'incomplete_expired':
+      return 'canceled';
+    default: // incomplete, paused, anything new
+      return null;
+  }
+};
+
 export class StripeService {
   private stripe: Stripe;
 
@@ -25,7 +50,11 @@ export class StripeService {
     if (!STRIPE_SECRET_KEY) {
       console.warn('STRIPE_SECRET_KEY not set. Payment features will not work.');
     }
-    this.stripe = new Stripe(STRIPE_SECRET_KEY, {
+    // Stripe's constructor throws on an empty key, and this module is imported
+    // from the route table, so an unset key took the entire server down at
+    // import time - over a feature the warning above says is merely
+    // unavailable. A placeholder keeps boot working; real calls still fail.
+    this.stripe = new Stripe(STRIPE_SECRET_KEY || 'sk_unset', {
       apiVersion: '2025-02-24.acacia',
     });
   }
@@ -178,7 +207,11 @@ export class StripeService {
       return;
     }
 
-    const status = subscription.status === 'active' ? 'active' : subscription.status === 'trialing' ? 'trialing' : 'canceled';
+    const status = subscriptionStatus(subscription.status);
+    if (!status) {
+      console.log(`Ignoring ${subscription.status} subscription for user ${userId}`);
+      return;
+    }
 
     db.updateSubscription(existingSubscription.id, {
       status,
