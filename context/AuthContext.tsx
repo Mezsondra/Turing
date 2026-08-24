@@ -24,6 +24,7 @@ interface AuthContextType {
   logout: () => void;
   refreshSubscription: () => Promise<void>;
   upgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => Promise<void>;
+  manageSubscription: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -142,6 +143,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     window.location.href = url;
   };
 
+  // Stripe's hosted billing portal is the whole cancellation flow: without a
+  // way to reach it a subscriber can only cancel by emailing us or filing a
+  // chargeback. Lifetime buyers get here too - they have no subscription to
+  // cancel, but the portal still shows their receipt.
+  const manageSubscription = async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) throw new Error('You need an account to manage billing');
+
+    const response = await fetch(`${API_URL}/api/payment/create-portal`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'Could not open the billing portal');
+    }
+
+    const { url } = await response.json();
+    window.location.href = url;
+  };
+
   const refreshSubscription = async () => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -173,6 +196,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     logout,
     refreshSubscription,
     upgrade,
+    manageSubscription,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

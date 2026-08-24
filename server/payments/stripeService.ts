@@ -110,7 +110,9 @@ export class StripeService {
 
       const session = await this.stripe.billingPortal.sessions.create({
         customer: subscription.stripe_customer_id,
-        return_url: `${process.env.CLIENT_URL}/settings`,
+        // There is no /settings route - the app is a single screen - so send
+        // them back to where they started.
+        return_url: process.env.CLIENT_URL,
       });
 
       return session.url;

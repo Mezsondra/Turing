@@ -16,7 +16,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     isVibrationEnabled, setIsVibrationEnabled 
   } = useSettings();
   const { t } = useTranslations();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isPremium, user, logout, manageSubscription } = useAuth();
 
   // Apple requires account deletion to be reachable in-app, not by emailing support.
   const deleteAccount = async () => {
@@ -31,6 +31,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
     if (response.ok) {
       alert(t('delete_account_done'));
       logout(); // reloads the page
+    }
+  };
+
+  const openBilling = async () => {
+    try {
+      await manageSubscription();
+    } catch (error: any) {
+      alert(error?.message || t('auth_failed'));
     }
   };
 
@@ -84,6 +92,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
           {isAuthenticated && (
             <div className="border-t border-slate-700 pt-4 space-y-3">
               <p className="text-slate-400 text-sm truncate">{user?.email}</p>
+              {isPremium && (
+                <button
+                  onClick={openBilling}
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 rounded-lg"
+                >
+                  {t('manage_subscription')}
+                </button>
+              )}
               <button
                 onClick={logout}
                 className="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-2 rounded-lg"
