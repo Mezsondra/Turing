@@ -85,6 +85,46 @@ export class DatabaseService {
       // Already present.
     }
 
+    // Rounds are billed when a match STARTS, not when a guess is submitted, so
+    // abandoning a round mid-way still spends the allowance. game_sessions
+    // cannot serve this: it is only written on a guess, and its INSERT OR
+    // IGNORE is what makes scoring idempotent.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS round_starts (
+        match_id   TEXT NOT NULL,
+        user_id    TEXT,
+        ip_hash    TEXT,
+        started_at INTEGER NOT NULL,
+        PRIMARY KEY (match_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_round_starts_user ON round_starts(user_id);
+      CREATE INDEX IF NOT EXISTS idx_round_starts_ip ON round_starts(ip_hash);
+    `);
+
+    // Carry existing history across, so nobody gets a fresh allowance just
+    // because the cap arrived after they had already played. Runs once: the
+    // primary key makes a repeat a no-op.
+    try {
+      this.db.exec(`
+        INSERT OR IGNORE INTO round_starts (match_id, user_id, ip_hash, started_at)
+        SELECT id, user_id, NULL, played_at FROM game_sessions
+      `);
+    } catch {
+      // No game_sessions yet.
+    }
+
+    // One-time email sign-in codes. One row per address: asking for a new code
+    // replaces the old one, so an attacker cannot keep several live at once.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS login_codes (
+        email      TEXT PRIMARY KEY,
+        code_hash  TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
     // Add score columns if they don't exist (for existing databases)
     try {
       this.db.exec(`
@@ -147,7 +187,7 @@ export class DatabaseService {
   attachAccountToGuest(
     userId: string,
     email: string,
-    passwordHash: string,
+    passwordHash: string | null,
     username?: string
   ): User | undefined {
     const result = this.db
@@ -337,6 +377,64 @@ export class DatabaseService {
   }
 
   /** Rounds this player has completed since a given moment. Used for the daily cap. */
+  // --- Email sign-in codes ---
+
+  saveLoginCode(email: string, codeHash: string, expiresAt: number): void {
+    this.db
+      .prepare(
+        `INSERT INTO login_codes (email, code_hash, expires_at, attempts, created_at)
+         VALUES (?, ?, ?, 0, ?)
+         ON CONFLICT(email) DO UPDATE SET
+           code_hash = excluded.code_hash,
+           expires_at = excluded.expires_at,
+           attempts = 0,
+           created_at = excluded.created_at`
+      )
+      .run(email, codeHash, expiresAt, Date.now());
+  }
+
+  getLoginCode(email: string): { code_hash: string; expires_at: number; attempts: number } | undefined {
+    return this.db
+      .prepare('SELECT code_hash, expires_at, attempts FROM login_codes WHERE email = ?')
+      .get(email) as { code_hash: string; expires_at: number; attempts: number } | undefined;
+  }
+
+  bumpLoginAttempts(email: string): void {
+    this.db.prepare('UPDATE login_codes SET attempts = attempts + 1 WHERE email = ?').run(email);
+  }
+
+  /** Codes are single use: consumed on success, so a replay finds nothing. */
+  clearLoginCode(email: string): void {
+    this.db.prepare('DELETE FROM login_codes WHERE email = ?').run(email);
+  }
+
+
+  // --- Free-round accounting ---
+
+  /** Idempotent: a re-announced match must not bill the player twice. */
+  recordRoundStart(matchId: string, userId: string, ipHash: string | null): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO round_starts (match_id, user_id, ip_hash, started_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(matchId, userId, ipHash, Date.now());
+  }
+
+  getRoundStartCount(userId: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as count FROM round_starts WHERE user_id = ?')
+      .get(userId) as { count: number };
+    return row.count;
+  }
+
+  getRoundStartCountByIp(ipHash: string): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) as count FROM round_starts WHERE ip_hash = ?')
+      .get(ipHash) as { count: number };
+    return row.count;
+  }
+
   getGameCountSince(userId: string, since: number): number {
     const stmt = this.db.prepare(
       'SELECT COUNT(*) as count FROM game_sessions WHERE user_id = ? AND played_at >= ?'
@@ -431,6 +529,10 @@ export class DatabaseService {
       this.db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
       this.db.prepare('DELETE FROM blocks WHERE blocker_id = ? OR blocked_id = ?').run(userId, userId);
       this.db.prepare('DELETE FROM reports WHERE reporter_id = ?').run(userId);
+      // Detach rather than delete: keeping the ip_hash means "delete my account"
+      // is not a way to buy 10 more free rounds, while the link to this person
+      // is gone with the row that identified them.
+      this.db.prepare('UPDATE round_starts SET user_id = NULL WHERE user_id = ?').run(userId);
       this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
     });
     remove();

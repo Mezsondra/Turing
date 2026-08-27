@@ -1,14 +1,17 @@
 import React from 'react';
 import { useTranslations } from '../hooks/useTranslations';
+import ExitToMenu from './ExitToMenu';
 
 interface GuessScreenProps {
   onGuess: (guess: 'HUMAN' | 'AI') => void;
+  onExit: () => void;
 }
 
-const GuessScreen: React.FC<GuessScreenProps> = ({ onGuess }) => {
+const GuessScreen: React.FC<GuessScreenProps> = ({ onGuess, onExit }) => {
   const { t } = useTranslations();
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+    <div className="relative flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+      <ExitToMenu onExit={onExit} confirm className="absolute top-5 left-5" />
       <div className="max-w-md">
         <h2 className="text-4xl md:text-5xl font-bold text-slate-200 mb-2">{t('times_up')}</h2>
         <p className="text-xl md:text-2xl text-cyan-400 mb-10">{t('guess_prompt')}</p>

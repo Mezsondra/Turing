@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { LockClosedIcon, ArrowPathIcon, CheckCircleIcon, ExclamationCircleIcon, PlusIcon, TrashIcon, FlagIcon } from '@heroicons/react/24/outline';
+import { API_URL } from '../lib/api';
 import useAdminState from '../hooks/useAdminState';
 import PromptEditor from './PromptEditor';
 
@@ -33,6 +34,158 @@ const AdminButton: React.FC<{ onClick: () => void; className: string; children: 
     {children}
   </button>
 );
+
+
+interface Report {
+  id: string;
+  reporter_id: string;
+  reported_id: string;
+  match_id: string;
+  reason: string;
+  transcript: string | null;
+  created_at: number;
+}
+
+const REASON_LABELS: Record<string, string> = {
+  harassment: 'Harassment or bullying',
+  sexual_content: 'Sexual or explicit content',
+  hate_speech: 'Hate speech',
+  spam: 'Spam or scam',
+  other: 'Something else',
+};
+
+const sinceLabel = (ms: number): string => {
+  const hours = (Date.now() - ms) / 3_600_000;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m ago`;
+  if (hours < 24) return `${Math.round(hours)}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+};
+
+/**
+ * The moderation queue. The onboarding tells players a person reads every
+ * report; this is where that person reads it. Reports older than 24h are
+ * flagged, because that is the window app stores expect them acted on in.
+ */
+const ReportsCard: React.FC<{ authToken: string }> = ({ authToken }) => {
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_URL}/api/admin/reports`, {
+        headers: { Authorization: authToken },
+      });
+      if (!response.ok) throw new Error('Failed to load reports');
+      const data = await response.json();
+      setReports(data.reports || []);
+    } catch {
+      setError('Could not load the moderation queue.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [authToken]);
+
+  const resolve = async (id: string, status: 'reviewed' | 'actioned') => {
+    setBusyId(id);
+    try {
+      const response = await fetch(`${API_URL}/api/admin/reports/${id}`, {
+        method: 'PUT',
+        headers: { Authorization: authToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error('Failed');
+      // The list only ever holds open reports, so a resolved one leaves it.
+      setReports((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      setError('Could not update that report. It is still in the queue.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <AdminCard title={`Moderation Queue${reports.length ? ` (${reports.length})` : ''}`}>
+      <div className="flex items-center justify-between -mt-2">
+        <p className="text-sm text-slate-400">
+          Open reports, newest first. Players are told these are read within 24 hours.
+        </p>
+        <button
+          onClick={load}
+          disabled={loading}
+          className="shrink-0 ml-4 text-sm font-semibold text-cyan-300 hover:text-cyan-200 disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
+
+      {error && <p className="text-sm text-red-300">{error}</p>}
+
+      {!loading && reports.length === 0 && !error && (
+        <div className="flex items-center gap-3 rounded-lg bg-slate-700/30 px-4 py-6 text-slate-400">
+          <CheckCircleIcon className="w-6 h-6 text-green-400 shrink-0" />
+          <span>Nothing waiting. Every report has been dealt with.</span>
+        </div>
+      )}
+
+      {reports.map((report) => {
+        const stale = Date.now() - report.created_at > 86_400_000;
+        return (
+          <div key={report.id} className="bg-slate-700/30 p-4 rounded-lg space-y-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <FlagIcon className="w-5 h-5 text-red-400 shrink-0" />
+              <span className="font-semibold text-slate-100">
+                {REASON_LABELS[report.reason] || report.reason}
+              </span>
+              <span className={`text-sm ${stale ? 'text-amber-400 font-semibold' : 'text-slate-400'}`}>
+                {sinceLabel(report.created_at)}{stale ? ' — over 24h' : ''}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 font-mono break-all">
+              reported {report.reported_id} · by {report.reporter_id}
+            </p>
+
+            {report.transcript ? (
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-cyan-300 hover:text-cyan-200">
+                  Transcript
+                </summary>
+                <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-900/70 p-3 text-sm text-slate-300">
+                  {report.transcript}
+                </pre>
+              </details>
+            ) : (
+              <p className="text-sm text-slate-500 italic">No transcript was captured.</p>
+            )}
+
+            <div className="flex gap-3">
+              <AdminButton
+                onClick={() => resolve(report.id, 'reviewed')}
+                disabled={busyId === report.id}
+                className="bg-slate-600 hover:bg-slate-500 text-white"
+              >
+                No action needed
+              </AdminButton>
+              <AdminButton
+                onClick={() => resolve(report.id, 'actioned')}
+                disabled={busyId === report.id}
+                className="bg-red-700 hover:bg-red-600 text-white"
+              >
+                Actioned
+              </AdminButton>
+            </div>
+          </div>
+        );
+      })}
+    </AdminCard>
+  );
+};
 
 const AdminPage: React.FC = () => {
   const {
@@ -189,6 +342,37 @@ const AdminPage: React.FC = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            <ReportsCard authToken={state.authToken} />
+
+            <AdminCard title="Free Rounds">
+              <p className="text-sm text-slate-400 -mt-2">
+                Lifetime allowances, not per day. A player who runs out is sent to sign up
+                (guests) or to the paywall (members). Premium is always unlimited.
+              </p>
+              {([
+                ['guest', 'Guest', 'Anonymous players, identified only by a browser-held device id.'],
+                ['member', 'Signed-in member', 'Accounts without a subscription. Should exceed the guest cap, or signing up buys nothing.'],
+                ['guestPerIp', 'Guest cap per IP', 'Backstop so clearing site data does not hand out a fresh allowance. Set well above the guest cap - offices and households share one address.'],
+              ] as const).map(([key, label, help]) => (
+                <LabeledInput key={key} label={label} description={help}>
+                  <input
+                    type="number"
+                    min={0}
+                    value={state.config.freeRounds?.[key] ?? 0}
+                    onChange={(e) =>
+                      updateConfig({
+                        freeRounds: {
+                          ...state.config!.freeRounds,
+                          [key]: Math.max(0, parseInt(e.target.value, 10) || 0),
+                        },
+                      })
+                    }
+                    className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 px-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                  />
+                </LabeledInput>
+              ))}
+            </AdminCard>
+
             <AdminCard title="AI Provider">
               <LabeledInput label="Provider">
                 <select

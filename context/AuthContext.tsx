@@ -21,6 +21,10 @@ interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, username?: string) => Promise<void>;
+  /** Passwordless: mail a one-time code to this address. */
+  requestEmailCode: (email: string) => Promise<void>;
+  signInWithCode: (email: string, code: string) => Promise<void>;
+  signInWithGoogle: (idToken: string) => Promise<void>;
   logout: () => void;
   refreshSubscription: () => Promise<void>;
   upgrade: (plan: 'monthly' | 'yearly' | 'lifetime') => Promise<void>;
@@ -67,6 +71,50 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * Every sign-in path ends here: keep the token, then reload so the websocket
+   * reconnects and the server re-resolves identity from the account rather
+   * than the guest device id.
+   */
+  const completeSession = (token: string) => {
+    localStorage.setItem('auth_token', token);
+    window.location.reload();
+  };
+
+  const postAuth = async (path: string, body: Record<string, unknown>) => {
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}/api/auth/${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      // fetch rejects with "Failed to fetch" for offline, DNS and CORS alike.
+      // None of those are worth showing a player verbatim.
+      throw new Error("Couldn't reach the server. Check your connection and try again.");
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Something went wrong.');
+    return data;
+  };
+
+  const requestEmailCode = async (email: string) => {
+    await postAuth('email/start', { email });
+  };
+
+  const signInWithCode = async (email: string, code: string) => {
+    // The device id lets the server claim this guest's existing progress
+    // instead of starting the new account from zero.
+    const data = await postAuth('email/verify', { email, code, deviceId: getDeviceId() });
+    completeSession(data.token);
+  };
+
+  const signInWithGoogle = async (idToken: string) => {
+    const data = await postAuth('google', { idToken, deviceId: getDeviceId() });
+    completeSession(data.token);
   };
 
   const login = async (email: string, password: string) => {
@@ -193,6 +241,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading,
     login,
     register,
+        requestEmailCode,
+        signInWithCode,
+        signInWithGoogle,
     logout,
     refreshSubscription,
     upgrade,

@@ -1,1 +1,65 @@
 @import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Onboarding slide motion.
+
+   Both slides move at once, in the same direction, with the same easing: the
+   outgoing one is pushed off and the incoming one arrives behind it, so five
+   taps read as one rail rather than five unrelated fades. Opacity is a separate,
+   shorter animation on each layer. The fades are deliberately staggered rather
+   than crossed: the outgoing one is down to a sliver by 120ms and the incoming
+   one only lights up at 100ms, so the two are never both legible - which reads
+   as a mush frame - and the stage is never empty either, which reads as a hole.
+   --------------------------------------------------------------------------- */
+@keyframes shift-in-fwd   { from { transform: translate3d(4rem, 0, 0); }  to { transform: none; } }
+@keyframes shift-out-fwd  { from { transform: none; } to { transform: translate3d(-4rem, 0, 0); } }
+@keyframes shift-in-back  { from { transform: translate3d(-4rem, 0, 0); } to { transform: none; } }
+@keyframes shift-out-back { from { transform: none; } to { transform: translate3d(4rem, 0, 0); } }
+@keyframes slide-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slide-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+[data-slide-state] { will-change: transform, opacity; }
+
+[data-slide-dir="forward"][data-slide-state="current"] {
+  animation: shift-in-fwd 380ms cubic-bezier(0.32, 0.72, 0, 1) both,
+             slide-fade-in 180ms ease-out 100ms both;
+}
+[data-slide-dir="forward"][data-slide-state="leaving"] {
+  animation: shift-out-fwd 380ms cubic-bezier(0.32, 0.72, 0, 1) both,
+             slide-fade-out 120ms linear both;
+}
+[data-slide-dir="back"][data-slide-state="current"] {
+  animation: shift-in-back 380ms cubic-bezier(0.32, 0.72, 0, 1) both,
+             slide-fade-in 180ms ease-out 100ms both;
+}
+[data-slide-dir="back"][data-slide-state="leaving"] {
+  animation: shift-out-back 380ms cubic-bezier(0.32, 0.72, 0, 1) both,
+             slide-fade-out 120ms linear both;
+}
+
+/* Slides opt their children into a settling cascade. The delays are deliberately
+   tight: the cascade has to finish inside the push above, not queue up behind it,
+   or a Continue tap costs the better part of a second before the screen is whole. */
+.stagger > * { animation: rise-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 45ms; }
+.stagger > *:nth-child(3) { animation-delay: 90ms; }
+.stagger > *:nth-child(4) { animation-delay: 135ms; }
+.stagger > *:nth-child(5) { animation-delay: 180ms; }
+.stagger > *:nth-child(6) { animation-delay: 225ms; }
+.stagger > *:nth-child(7) { animation-delay: 270ms; }
+.stagger > *:nth-child(8) { animation-delay: 315ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slide-dir],
+  [data-slide-state],
+  .stagger > * { animation: none !important; }
+  /* No cross-fade to watch, so the outgoing slide must not linger on top. */
+  [data-slide-state="leaving"] { display: none !important; }
+  [data-progress-fill] { transition: none !important; }
+}

@@ -28,28 +28,43 @@ import {
 import { db } from './database/db.js';
 import { authService } from './auth/authService.js';
 import { v4 as uuidv4 } from 'uuid';
+import { createHmac } from 'crypto';
+import { roundsLeft as computeRoundsLeft } from './freeRounds.js';
 
 /** Free players see an interstitial every N completed rounds. */
 const AD_EVERY_N_ROUNDS = 3;
 
-/** Rounds a free player may complete per day. Premium is unlimited. */
-const FREE_ROUNDS_PER_DAY = 10;
-
-/** Midnight UTC today - the cap resets on a fixed clock, not a rolling window. */
-const startOfDayUtc = (): number => {
-  const now = new Date();
-  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-};
-
 /**
- * How many rounds this player has left today. Infinity for premium, and for
- * players we cannot identify (no device id), who get no persistence anyway.
+ * IPs are a fallback identity, so they are stored hashed rather than in the
+ * clear. Keyed with JWT_SECRET: a leaked database alone does not reverse it.
  */
-const roundsLeftToday = (playerId: string | undefined): number => {
-  if (!playerId) return Infinity;
-  if (authService.isPremiumUser(playerId)) return Infinity;
-  return Math.max(0, FREE_ROUNDS_PER_DAY - db.getGameCountSince(playerId, startOfDayUtc()));
+const hashIp = (address: string | undefined): string | null => {
+  if (!address) return null;
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return null;
+  return createHmac('sha256', secret).update(address).digest('hex');
 };
+
+/** socket.id -> hashed IP, so the cap can be checked when a match is made. */
+const socketToIp: Map<string, string | null> = new Map();
+
+/** An account is a guest until it has an email on it. */
+const isGuestPlayer = (playerId: string): boolean => {
+  const user = db.getUserById(playerId);
+  return !!user && !user.email;
+};
+
+/** Resolves the live inputs and defers the decision to the pure rule. */
+const roundsLeft = (playerId: string | undefined, ipHash: string | null): number =>
+  computeRoundsLeft({
+    playerId,
+    ipHash,
+    isPremium: !!playerId && authService.isPremiumUser(playerId),
+    isGuest: !!playerId && isGuestPlayer(playerId),
+    caps: adminConfigService.getFreeRounds(),
+    usedByPlayer: playerId ? db.getRoundStartCount(playerId) : 0,
+    usedByIp: ipHash ? db.getRoundStartCountByIp(ipHash) : 0,
+  });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -120,10 +135,10 @@ const clearRoundTimer = (matchId: string) => {
 const sendStats = (socketId: string, playerId: string) => {
   const player = db.getUserById(playerId);
   if (!player) return;
-  const remaining = roundsLeftToday(playerId);
+  const remaining = roundsLeft(playerId, socketToIp.get(socketId) ?? null);
 
   io.to(socketId).emit('stats', {
-    roundsLeftToday: Number.isFinite(remaining) ? remaining : null,
+    roundsLeft: Number.isFinite(remaining) ? remaining : null,
     score: player.score,
     gamesPlayed: player.games_played,
     gamesWon: player.games_won,
@@ -201,6 +216,14 @@ matchmakingService.onMatch(async (match) => {
   const roundEndsAt = Date.now() + roundDurationSeconds * 1000;
   const payload = { matchId: match.id, partnerType: 'unknown', roundDurationSeconds, roundEndsAt };
 
+  // Bill both players now. Doing this on the guess instead would mean leaving
+  // mid-round - which the menu button makes a single tap - costs nothing.
+  for (const user of [match.user1, match.user2]) {
+    if (user?.playerId) {
+      db.recordRoundStart(match.id, user.playerId, socketToIp.get(user.socketId) ?? null);
+    }
+  }
+
   io.to(match.user1.socketId).emit('matched', payload);
   if (match.user2) {
     io.to(match.user2.socketId).emit('matched', payload);
@@ -244,6 +267,8 @@ io.on('connection', async (socket: Socket) => {
   // Identity, in order of precedence:
   //  1. a signed-in account (same player on any device)
   //  2. a guest device id kept in localStorage (no signup, still persistent)
+  socketToIp.set(socket.id, hashIp(socket.handshake.address));
+
   const rawDeviceId = socket.handshake.auth?.deviceId;
   const rawToken = socket.handshake.auth?.token;
   const deviceId =
@@ -279,8 +304,13 @@ io.on('connection', async (socket: Socket) => {
 
       // Server-enforced: a client cannot grant itself more rounds.
       const playerId = socketToPlayer.get(socket.id);
-      if (roundsLeftToday(playerId) <= 0) {
-        socket.emit('daily-limit-reached', { limit: FREE_ROUNDS_PER_DAY });
+      const ipHash = socketToIp.get(socket.id) ?? null;
+      if (roundsLeft(playerId, ipHash) <= 0) {
+        const caps = adminConfigService.getFreeRounds();
+        socket.emit('round-limit-reached', {
+          limit: playerId && !isGuestPlayer(playerId) ? caps.member : caps.guest,
+          isGuest: !playerId || isGuestPlayer(playerId),
+        });
         return;
       }
 
@@ -573,6 +603,7 @@ io.on('connection', async (socket: Socket) => {
       socketToUser.delete(socket.id);
       socketToPlayer.delete(socket.id);
     }
+    socketToIp.delete(socket.id);
   });
 });
 

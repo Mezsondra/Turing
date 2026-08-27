@@ -20,6 +20,17 @@ export interface AdminConfiguration {
     xai: AIProviderSettings;
   };
 
+  // How many rounds a player gets before they have to pay. Lifetime totals,
+  // not per day: a cap that resets never forces a decision.
+  freeRounds: {
+    /** Anonymous players, identified only by a browser-held device id. */
+    guest: number;
+    /** Signed-in accounts without a subscription. */
+    member: number;
+    /** Backstop across one IP, so wiping localStorage does not fully reset. */
+    guestPerIp: number;
+  };
+
   // Matchmaking Settings
   aiMatchProbability: number; // 0-1, probability of matching with AI
   matchTimeoutMs: number;
@@ -67,6 +78,7 @@ export class AdminConfigService {
           apiBaseUrl: process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1',
         },
       },
+      freeRounds: { guest: 5, member: 10, guestPerIp: 20 },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
       conversationDurationSeconds: 60,
@@ -115,6 +127,10 @@ export class AdminConfigService {
             ...defaultConfig.initialPrompts,
             ...(loadedConfig.initialPrompts || {}),
           },
+          freeRounds: {
+            ...defaultConfig.freeRounds,
+            ...(loadedConfig.freeRounds || {}),
+          },
           languages: loadedConfig.languages || defaultConfig.languages,
           conversationDurationSeconds: loadedConfig.conversationDurationSeconds ?? defaultConfig.conversationDurationSeconds,
         };
@@ -161,6 +177,22 @@ export class AdminConfigService {
 
   getConversationDurationSeconds(): number {
     return Math.max(10, this.config.conversationDurationSeconds || 60);
+  }
+
+  /**
+   * Free-round caps, clamped. A negative or missing value would otherwise mean
+   * "nobody may play" or "everybody plays forever", both one typo away in a
+   * form an admin edits by hand.
+   */
+  getFreeRounds(): { guest: number; member: number; guestPerIp: number } {
+    const f = this.config.freeRounds || { guest: 5, member: 10, guestPerIp: 20 };
+    const clamp = (n: unknown, fallback: number) =>
+      Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : fallback;
+    return {
+      guest: clamp(f.guest, 5),
+      member: clamp(f.member, 10),
+      guestPerIp: clamp(f.guestPerIp, 20),
+    };
   }
 
   getLanguages(): string[] {
@@ -294,6 +326,10 @@ export class AdminConfigService {
       initialPrompts: {
         ...currentConfig.initialPrompts,
         ...(updates.initialPrompts || {}),
+      },
+      freeRounds: {
+        ...currentConfig.freeRounds,
+        ...(updates.freeRounds || {}),
       },
       languages: updates.languages || currentConfig.languages,
       conversationDurationSeconds:

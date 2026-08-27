@@ -8,13 +8,15 @@ import { playSound } from '../lib/audio';
 import { triggerVibration } from '../lib/vibration';
 import { socketService } from '../services/socketService';
 import ReportModal from './ReportModal';
+import ExitToMenu from './ExitToMenu';
 
 interface ChatScreenProps {
   onTimeUp: (actualPartner: 'HUMAN' | 'AI', matchId: string) => void;
   score: number;
+  onExit: () => void;
 }
 
-const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
+const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isPartnerTyping, setIsPartnerTyping] = useState(false);
@@ -172,7 +174,8 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
   // Show loading/searching state
   if (connectionStatus === 'connecting' || connectionStatus === 'searching') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+      <div className="relative flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+        <ExitToMenu onExit={onExit} className="absolute top-5 left-5" />
         <LoadingSpinner />
         <p className="text-xl text-slate-300 mt-4">
           {connectionStatus === 'connecting' ? t('connecting') || 'Connecting...' : t('searching_partner') || 'Searching for a partner...'}
@@ -194,7 +197,8 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
     };
 
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+      <div className="relative flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
+        <ExitToMenu onExit={onExit} className="absolute top-5 left-5" />
         <p className="text-xl text-red-400 max-w-sm">{errorMessage || t('connection_failed')}</p>
         <button
           onClick={retry}
@@ -209,7 +213,10 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score }) => {
   return (
     <div className="flex flex-col h-screen bg-slate-800">
       <header className="bg-slate-900/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-slate-700 sticky top-0">
-        <h2 className="text-xl font-bold text-slate-200">{t('score')}: <span className="text-cyan-400">{score}</span></h2>
+        <div className="flex items-center gap-4">
+          <ExitToMenu onExit={onExit} confirm />
+          <h2 className="text-xl font-bold text-slate-200">{t('score')}: <span className="text-cyan-400">{score}</span></h2>
+        </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsReporting(true)}

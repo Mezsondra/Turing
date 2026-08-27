@@ -14,7 +14,8 @@ interface MatchedEvent {
 
 export interface StatsEvent {
   /** Rounds remaining today, or null when unlimited (premium). */
-  roundsLeftToday: number | null;
+  /** Free rounds remaining for good; null means unlimited (premium). */
+  roundsLeft: number | null;
   score: number;
   gamesPlayed: number;
   gamesWon: number;
@@ -188,8 +189,8 @@ export class SocketService {
   }
 
   /** Fires when a free player has used up today's rounds. */
-  onDailyLimit(callback: (data: { limit: number }) => void): () => void {
-    return this.subscribe('daily-limit-reached', callback);
+  onRoundLimit(callback: (data: { limit: number; isGuest: boolean }) => void): () => void {
+    return this.subscribe('round-limit-reached', callback);
   }
 
   /** Fires when a human partner guessed you were a bot - you fooled them. */

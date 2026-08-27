@@ -8,6 +8,7 @@ import AdModal from './components/AdModal';
 import PremiumModal, { PremiumPlan } from './components/PremiumModal';
 import AuthModal from './components/AuthModal';
 import AgeGate, { hasConfirmedAge } from './components/AgeGate';
+import Onboarding, { hasOnboarded } from './components/onboarding/Onboarding';
 import { useAuth } from './context/AuthContext';
 import { useTranslations } from './hooks/useTranslations';
 import { GameState } from './types';
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [pendingAd, setPendingAd] = useState(false);
   const [roundsLeft, setRoundsLeft] = useState<number | null>(null);
   const [ageConfirmed, setAgeConfirmed] = useState(hasConfirmedAge);
+  const [onboarded, setOnboarded] = useState(hasOnboarded);
 
   // Token verification resolves after mount, so isAuthenticated flips to true
   // without a re-render of the socket effect. Read it through a ref.
@@ -49,11 +51,12 @@ const App: React.FC = () => {
 
     const unsubscribeStats = socketService.onStats((stats) => {
       setScoreData(stats);
-      setRoundsLeft(stats.roundsLeftToday);
+      setRoundsLeft(stats.roundsLeft);
     });
 
-    // Out of free rounds: send them to the upgrade path rather than a dead end.
-    const unsubscribeLimit = socketService.onDailyLimit(() => {
+    // Out of free rounds. Guests are sent to sign up - which is worth more
+    // rounds - and members to the paywall, because that is all that is left.
+    const unsubscribeLimit = socketService.onRoundLimit(() => {
       setGameState(GameState.WELCOME);
       setModal(isAuthenticatedRef.current ? 'premium' : 'auth');
     });
@@ -122,6 +125,17 @@ const App: React.FC = () => {
     setGameState(GameState.WELCOME);
   };
 
+  // Leaving mid-round has to reach the server, or the match lives on and the
+  // partner is left talking to nobody. Dropping the socket runs the same
+  // cleanup a closed tab would.
+  const handleExitToMenu = () => {
+    socketService.disconnect();
+    socketService.connect().catch((error) => console.error('Reconnect failed:', error));
+    setFooledPartner(false);
+    setPendingAd(false);
+    setGameState(GameState.WELCOME);
+  };
+
   const dismissAd = () => {
     setPendingAd(false);
     setModal('none');
@@ -139,9 +153,9 @@ const App: React.FC = () => {
   const renderGameState = () => {
     switch (gameState) {
       case GameState.CHATTING:
-        return <ChatScreen onTimeUp={handleTimeUp} score={scoreData.score} />;
+        return <ChatScreen onTimeUp={handleTimeUp} score={scoreData.score} onExit={handleExitToMenu} />;
       case GameState.GUESSING:
-        return <GuessScreen onGuess={handleGuess} />;
+        return <GuessScreen onGuess={handleGuess} onExit={handleExitToMenu} />;
       case GameState.RESULT:
         return <ResultScreen
           wasCorrect={lastGuessCorrect}
@@ -155,6 +169,7 @@ const App: React.FC = () => {
           bestStreak={scoreData.bestStreak}
           timesFooled={scoreData.timesFooled}
           fooledPartner={fooledPartner}
+          onExit={handleExitToMenu}
         />;
       case GameState.WELCOME:
       default:
@@ -167,6 +182,8 @@ const App: React.FC = () => {
             isPremium={isPremium}
             roundsLeft={roundsLeft}
             onOpenAccount={() => setModal(isAuthenticated ? 'premium' : 'auth')}
+            onReplayIntro={() => setOnboarded(false)}
+            isAuthenticated={isAuthenticated}
           />
         );
     }
@@ -182,6 +199,12 @@ const App: React.FC = () => {
   // Strangers in unmoderated live chat: confirm age before any of it is reachable.
   if (!ageConfirmed) {
     return <AgeGate onConfirm={() => setAgeConfirmed(true)} />;
+  }
+
+  // First run: explain the game and the house rules before anyone is matched
+  // with a stranger.
+  if (!onboarded) {
+    return <Onboarding onDone={() => setOnboarded(true)} />;
   }
 
   return (

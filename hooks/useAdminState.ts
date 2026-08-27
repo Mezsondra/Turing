@@ -11,8 +11,15 @@ interface ProviderConfig {
   apiBaseUrl?: string;
 }
 
+interface FreeRounds {
+  guest: number;
+  member: number;
+  guestPerIp: number;
+}
+
 interface AdminConfig {
   aiProvider: ProviderKey;
+  freeRounds: FreeRounds;
   aiProviders: Record<ProviderKey, ProviderConfig>;
   aiMatchProbability: number;
   matchTimeoutMs: number;
@@ -27,6 +34,7 @@ interface AdminConfig {
 }
 
 type AdminConfigUpdate = Partial<Omit<AdminConfig, 'aiProviders' | 'prompts' | 'languages'>> & {
+  freeRounds?: Partial<FreeRounds>;
   aiProviders?: Partial<Record<ProviderKey, Partial<ProviderConfig>>>;
   prompts?: Partial<AdminConfig['prompts']>;
   initialPrompts?: Partial<AdminConfig['initialPrompts']>;
