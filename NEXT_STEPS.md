@@ -227,9 +227,14 @@ ship rather than blanks.
   integration, not a port: Stripe stays web-only, mobile needs StoreKit or
   RevenueCat, and the entitlement check has to accept either source. Nothing
   about this is started.
-- Rewarded video. The format that actually pays in games, and the reason AdMob
-  beats AdSense here. Not built - the interstitial slot already existed, so it
-  went first.
+- Rewarded video is built, but **it grants nothing until you configure SSV**.
+  In the AdMob console open the rewarded ad unit → Server-side verification and
+  set the callback to `https://turing-test.app/api/ads/reward`. Without it the
+  video plays, the player is thanked, and no rounds are ever credited - the
+  grant comes from Google calling us, never from the client.
+  Set `VITE_ADMOB_REWARDED_ID` in the same pass and rebuild (`VITE_*` is
+  compiled in). Verify with `sqlite3 turing.db "SELECT * FROM reward_grants;"`
+  after watching one on a real device.
 - App icons, splash screens, store listings, screenshots.
 - A real device test. The simulator does not serve real ads.
 
