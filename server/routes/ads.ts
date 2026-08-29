@@ -32,9 +32,19 @@ router.get('/reward', async (req: Request, res: Response) => {
       grant = verifyRewardCallback(rawQuery, (id) => keys.get(id));
     }
 
+    // Unverified callbacks still answer 200, and grant nothing. Two reasons:
+    // AdMob validates the URL from the console by pinging it unsigned, and a
+    // rejection is never something Google should retry - it is a forgery or a
+    // test, and neither improves on a second attempt. The signature is what
+    // protects the grant; the status code was never doing that job.
     if (!grant) {
-      console.warn('Rejected an unverified reward callback');
-      return res.status(403).send('invalid signature');
+      const hadSignature = rawQuery.includes('&signature=');
+      console.warn(
+        hadSignature
+          ? 'Reward callback failed verification - granting nothing'
+          : 'Unsigned request to the reward callback (AdMob console check, or a probe)'
+      );
+      return res.status(200).send('ok');
     }
 
     if (grant.rewardAmount > 0) {
@@ -46,7 +56,9 @@ router.get('/reward', async (req: Request, res: Response) => {
 
     res.status(200).send('ok');
   } catch (error) {
-    // A 500 makes Google retry, which is what we want if the key fetch failed.
+    // The one case worth a retry: the key fetch or the database failed, so a
+    // genuine reward may have been lost. 500 is what makes Google send it
+    // again.
     console.error('Reward callback failed:', error);
     res.status(500).send('error');
   }
