@@ -16,7 +16,7 @@ import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
 import { adminConfigService } from './adminConfig.js';
 import { rateLimit, hitLimit } from './rateLimit.js';
-import { moderateMessage } from './moderation.js';
+import { moderateMessage, classifyMessage } from './moderation.js';
 import { computeDelays, forgetMatch } from './humanTiming.js';
 import {
   personaFor,
@@ -406,6 +406,29 @@ io.on('connection', async (socket: Socket) => {
         if (partner) {
           io.to(partner.socketId).emit('message', { text: message, fromAI: false });
         }
+
+        // Second pass, deliberately after delivery - see moderation.ts for why
+        // it must not sit in front of the message. A hit becomes a queue entry
+        // for a human, not an automatic punishment.
+        const senderId = socketToPlayer.get(socket.id);
+        if (senderId) {
+          classifyMessage(message)
+            .then((category) => {
+              if (category === 'none') return;
+              db.createReport({
+                id: uuidv4(),
+                // No human filed this one. Reports are never joined against
+                // users, and a literal keeps the row out of the cascade when a
+                // player deletes their account - evidence should outlive them.
+                reporter_id: 'system',
+                reported_id: senderId,
+                match_id: match.id,
+                reason: `auto:${category}`,
+                transcript: message.slice(0, 5000),
+              });
+            })
+            .catch((error) => console.error('Moderation review failed:', error));
+        }
       }
     } catch (error) {
       console.error('Error in send-message:', error);
@@ -630,4 +653,9 @@ httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`WebSocket server ready for connections`);
   console.log(`API endpoints available at http://localhost:${PORT}/api`);
+  // Without a key the second moderation pass is a no-op and the wordlist is the
+  // whole filter. That is a launch blocker, not a warning to scroll past.
+  if (!adminConfigService.getGeminiApiKey() && !process.env.GEMINI_API_KEY) {
+    console.warn('WARNING: no Gemini key - LLM moderation is OFF, wordlist only.');
+  }
 });

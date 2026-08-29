@@ -1,6 +1,6 @@
 // Run: npx tsx server/moderation.test.ts
 import assert from 'assert';
-import { moderateMessage } from './moderation.js';
+import { moderateMessage, parseVerdict } from './moderation.js';
 
 try {
   // Ordinary chat, including mild profanity, must pass. This is a game about
@@ -20,7 +20,20 @@ try {
   assert.strictEqual(moderateMessage('email me at a@b.com').reason, 'contact');
   assert.strictEqual(moderateMessage('call me 555 123 4567').reason, 'contact');
 
+  // The classifier itself needs an API key, but the part that can silently go
+  // wrong offline is reading the model's answer. A wrapped or chatty reply must
+  // still land on the right category, and an unparseable one must never invent
+  // a report against a player.
+  assert.strictEqual(parseVerdict('none'), 'none');
+  assert.strictEqual(parseVerdict('harassment'), 'harassment');
+  assert.strictEqual(parseVerdict('**harassment**\n'), 'harassment');
+  assert.strictEqual(parseVerdict('The message is threat.'), 'threat');
+  assert.strictEqual(parseVerdict('Category: MINORS'), 'minors');
+  assert.strictEqual(parseVerdict(''), 'none');
+  assert.strictEqual(parseVerdict('I cannot help with that request'), 'none');
+
   console.log('PASS: filter blocks slurs and contact details, allows normal chat');
+  console.log('PASS: classifier verdicts parse, unparseable replies stay clean');
 } catch (error: any) {
   console.error('FAIL:', error.message);
   process.exitCode = 1;
