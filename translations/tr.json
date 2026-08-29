@@ -123,5 +123,6 @@
   "google_failed": "Google girişi tamamlanmadı. E-posta kodunu dene.",
   "privacy_policy": "Gizlilik",
   "terms_of_service": "Koşullar",
-  "agree_notice": "Devam ederek şunları kabul edersiniz:"
+  "agree_notice": "Devam ederek şunları kabul edersiniz:",
+  "banned_message": "Topluluk kurallarını ihlal ettiğiniz için hesabınız askıya alındı. Bunun bir hata olduğunu düşünüyorsanız support@turing-test.app adresine yazın."
 }

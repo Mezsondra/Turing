@@ -27,6 +27,11 @@ const App: React.FC = () => {
   // without a re-render of the socket effect. Read it through a ref.
   const isAuthenticatedRef = useRef(isAuthenticated);
   useEffect(() => { isAuthenticatedRef.current = isAuthenticated; }, [isAuthenticated]);
+
+  // The socket subscriptions below register once, so a t() captured in there
+  // would keep speaking whatever language was loaded first.
+  const tRef = useRef(t);
+  tRef.current = t;
   const [gameState, setGameState] = useState<GameState>(GameState.WELCOME);
   const [lastGuessCorrect, setLastGuessCorrect] = useState(false);
   const [partnerType, setPartnerType] = useState<'HUMAN' | 'AI'>('AI');
@@ -61,6 +66,13 @@ const App: React.FC = () => {
       setModal(isAuthenticatedRef.current ? 'premium' : 'auth');
     });
 
+    // Suspended. An alert rather than a screen: it is a dead end, not a state
+    // the app has anything more to say about.
+    const unsubscribeBanned = socketService.onBanned(() => {
+      setGameState(GameState.WELCOME);
+      alert(tRef.current('banned_message'));
+    });
+
     // A human partner may declare you a bot before or after your own guess
     // lands, so this is tracked separately rather than folded into the result.
     const unsubscribeVerdict = socketService.onPartnerVerdict(({ fooledPartner: fooled }) => {
@@ -90,6 +102,7 @@ const App: React.FC = () => {
     return () => {
       unsubscribeStats();
       unsubscribeLimit();
+      unsubscribeBanned();
       unsubscribeVerdict();
       unsubscribeGuess();
     };

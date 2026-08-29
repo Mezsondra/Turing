@@ -187,8 +187,19 @@ router.put('/reports/:id', requireAdmin, (req: Request, res: Response) => {
     if (status !== 'reviewed' && status !== 'actioned') {
       return res.status(400).json({ success: false, error: 'Invalid status' });
     }
+    // "Actioned" is the only place a ban is issued: reviewing a report is what
+    // decides one, so a separate ban flow would just be a second door to the
+    // same room. 'reviewed' lifts it again, which covers a misclick - once the
+    // report leaves the open queue there is no UI left to unban from.
+    const report = db.getReport(req.params.id);
+    const target = report?.reported_id as string | undefined;
+    // Reports can name 'AI' as the offender. There is nobody to ban.
+    if (target && target !== 'AI') {
+      db.setUserBanned(target, status === 'actioned');
+    }
+
     db.setReportStatus(req.params.id, status);
-    res.json({ success: true });
+    res.json({ success: true, banned: status === 'actioned' && target !== 'AI' });
   } catch (error) {
     console.error('Error updating report:', error);
     res.status(500).json({ success: false, error: 'Failed to update report' });

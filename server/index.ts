@@ -305,6 +305,15 @@ io.on('connection', async (socket: Socket) => {
       // Server-enforced: a client cannot grant itself more rounds.
       const playerId = socketToPlayer.get(socket.id);
       const ipHash = socketToIp.get(socket.id) ?? null;
+
+      // Banned players are stopped here rather than at connect, so a ban is one
+      // check on the path that actually matters: reaching another person. A
+      // player banned mid-round finishes it - the round is a minute, and
+      // yanking someone out of a chat is a worse experience for their partner.
+      if (db.isBanned(playerId || null, ipHash)) {
+        socket.emit('banned');
+        return;
+      }
       if (roundsLeft(playerId, ipHash) <= 0) {
         const caps = adminConfigService.getFreeRounds();
         socket.emit('round-limit-reached', {

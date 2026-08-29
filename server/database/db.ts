@@ -77,6 +77,23 @@ export class DatabaseService {
       }
     }
 
+    // Hashed IPs of banned players, kept separately rather than joined out of
+    // round_starts: deleteUser nulls that user_id, so a banned player could
+    // otherwise lift their own IP ban by deleting their account.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS banned_ips (
+        ip_hash    TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+      );
+    `);
+
+    // Ban marker. NULL means not banned; a timestamp is when they were banned.
+    try {
+      this.db.exec('ALTER TABLE users ADD COLUMN banned_at INTEGER');
+    } catch {
+      // Already present.
+    }
+
     // Guest identity column, for databases created before it existed.
     try {
       this.db.exec('ALTER TABLE users ADD COLUMN device_id TEXT');
@@ -487,6 +504,72 @@ export class DatabaseService {
         report.transcript || null,
         Date.now()
       );
+  }
+
+  getReport(id: string): Record<string, unknown> | undefined {
+    return this.db.prepare('SELECT * FROM reports WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined;
+  }
+
+  /**
+   * ponytail: unbanning clears every IP this player used, which also frees
+   * anyone else banned from the same address. Households sharing an IP with two
+   * separate abusers is not a case worth carrying code for; if it ever happens,
+   * key banned_ips by user too.
+   */
+  setUserBanned(userId: string, banned: boolean): void {
+    const apply = this.db.transaction(() => {
+      this.db
+        .prepare('UPDATE users SET banned_at = ?, updated_at = ? WHERE id = ?')
+        .run(banned ? Date.now() : null, Date.now(), userId);
+
+      if (banned) {
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO banned_ips (ip_hash, created_at)
+             SELECT DISTINCT ip_hash, ? FROM round_starts
+              WHERE user_id = ? AND ip_hash IS NOT NULL`
+          )
+          .run(Date.now(), userId);
+      } else {
+        this.db
+          .prepare(
+            `DELETE FROM banned_ips WHERE ip_hash IN (
+               SELECT ip_hash FROM round_starts WHERE user_id = ?
+             )`
+          )
+          .run(userId);
+      }
+    });
+    apply();
+  }
+
+  /**
+   * Whether this player may play at all.
+   *
+   * Checked against the account *and* the hashed IP, because guest identity is
+   * self-asserted: clearing localStorage mints a new device id, so an
+   * account-only ban is evaded in seconds.
+   *
+   * ponytail: an IP ban catches the household, not the person - a phone on
+   * mobile data walks straight past it, and a shared connection punishes the
+   * innocent. It raises the cost of evasion from trivial to annoying, which is
+   * the honest ceiling here. Device fingerprinting is the next rung and is not
+   * worth it until bans are actually being evaded.
+   */
+  isBanned(playerId: string | null, ipHash: string | null): boolean {
+    if (playerId) {
+      const user = this.db
+        .prepare('SELECT 1 FROM users WHERE id = ? AND banned_at IS NOT NULL')
+        .get(playerId);
+      if (user) return true;
+    }
+    if (ipHash) {
+      const banned = this.db.prepare('SELECT 1 FROM banned_ips WHERE ip_hash = ?').get(ipHash);
+      if (banned) return true;
+    }
+    return false;
   }
 
   getOpenReports(limit = 100): Array<Record<string, unknown>> {

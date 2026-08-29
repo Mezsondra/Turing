@@ -37,7 +37,8 @@ for your data. It is short because the game collects little.</p>
       guessed, whether you were right)</td>
       <td>Your stats and history.</td></tr>
   <tr><td>A one-way hash of your IP address</td>
-      <td>Only to count free rounds against the daily limit. We do not store the
+      <td>To count free rounds against the daily limit, and to enforce a
+      suspension if your account is suspended for abuse. We do not store the
       address itself and cannot recover it from the hash.</td></tr>
   <tr><td>If you create an account: your email address, a bcrypt hash of your
       password, and your chosen username</td>
@@ -95,9 +96,9 @@ abuse against someone else.</p>
 
 <p>Settings &rarr; Delete Account, in the app. It permanently removes your user
 record, game history, subscription record and blocks. Two things deliberately
-survive: reports filed <em>against</em> you, and the hashed IP used for the free
-round counter - otherwise deleting an account would be a way to reset the daily
-limit.</p>
+survive: reports filed <em>against</em> you, and the hashed IP - otherwise
+deleting an account would be a way to reset the daily round limit, or to lift a
+suspension.</p>
 
 <p>Deleting your account does not cancel Stripe billing. Cancel first, via
 Settings &rarr; Manage Subscription.</p>

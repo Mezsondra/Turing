@@ -79,6 +79,22 @@ matchmaking), a moderation queue at `/api/admin/reports`, message filtering,
 in-app account deletion, and a 17+ age gate. Privacy policy at `/privacy.html`
 and terms at `/terms.html`, linked from Settings and accepted at the age gate.
 
+**Bans.** "Actioned" in the moderation queue now actually suspends the reported
+player instead of only relabelling the report; "No action needed" lifts it,
+which is the only undo, because an actioned report leaves the open queue and
+there is no other UI to unban from. The ban covers the account and the hashed
+IPs it played from, since a guest mints a new identity by clearing
+localStorage. It survives account deletion on purpose - otherwise Settings →
+Delete Account is a documented one-tap evasion. To lift one by hand:
+
+```bash
+sqlite3 /sdc/turing/turing.db \
+  "UPDATE users SET banned_at = NULL WHERE email = 'them@example.com';
+   DELETE FROM banned_ips WHERE ip_hash IN
+     (SELECT ip_hash FROM round_starts WHERE user_id =
+       (SELECT id FROM users WHERE email = 'them@example.com'));"
+```
+
 **Moderation.** Two passes. The wordlist blocks the unambiguous before delivery;
 a Gemini classifier reviews every human-to-human message after delivery and
 files anything subtler into the same queue a player report goes to, as

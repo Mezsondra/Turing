@@ -198,6 +198,11 @@ export class SocketService {
     return this.subscribe('partner-verdict', callback);
   }
 
+  /** Fires when a suspended player tries to start a round. */
+  onBanned(callback: () => void): () => void {
+    return this.subscribe('banned', callback);
+  }
+
   onPartnerDisconnected(callback: () => void): () => void {
     return this.subscribe('partner-disconnected', callback);
   }

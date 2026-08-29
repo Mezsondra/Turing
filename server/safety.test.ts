@@ -31,6 +31,39 @@ try {
   db.setReportStatus('r1', 'actioned');
   assert.strictEqual(db.getOpenReports().length, 0, 'actioned reports leave the queue');
 
+  // Bans. The account check is the easy half; the IP half is what makes a ban
+  // worth issuing at all, since a guest mints a new identity by clearing
+  // localStorage.
+  const carol = db.getOrCreateGuest('dev-carol', 'p-carol');
+  assert.strictEqual(db.isBanned(carol.id, 'ip-carol'), false);
+
+  db.recordRoundStart('m-ban', carol.id, 'ip-carol');
+  db.setUserBanned(carol.id, true);
+  assert.strictEqual(db.isBanned(carol.id, null), true, 'the account is banned');
+  assert.strictEqual(
+    db.isBanned('p-brand-new-guest', 'ip-carol'),
+    true,
+    'a fresh guest identity on the banned IP is still banned'
+  );
+  assert.strictEqual(db.isBanned('p-someone-else', 'ip-elsewhere'), false, 'nobody else is caught');
+
+  // Deleting the account must not lift the ban: "delete account" is documented
+  // in the privacy policy, so it would be a one-tap, discoverable evasion.
+  db.deleteUser(carol.id);
+  assert.strictEqual(
+    db.isBanned('p-brand-new-guest', 'ip-carol'),
+    true,
+    'deleting a banned account does not lift the IP ban'
+  );
+
+  // A ban has to be liftable, or a misclick in the admin queue is permanent.
+  const dave = db.getOrCreateGuest('dev-dave', 'p-dave');
+  db.recordRoundStart('m-ban2', dave.id, 'ip-dave');
+  db.setUserBanned(dave.id, true);
+  assert.strictEqual(db.isBanned('p-other', 'ip-dave'), true);
+  db.setUserBanned(dave.id, false);
+  assert.strictEqual(db.isBanned(dave.id, 'ip-dave'), false, 'unbanning clears the IP too');
+
   // Deleting an account removes the player and their data...
   db.recordGuess({ userId: alice.id, matchId: 'm2', partnerType: 'AI', guess: 'AI', wasCorrect: true });
   db.deleteUser(alice.id);
@@ -44,7 +77,7 @@ try {
   db.deleteUser(alice.id);
   assert.strictEqual(db.getOpenReports().length, 1, 'reports against a deleted user are retained');
 
-  console.log('PASS: blocks are symmetric, reports persist, deletion is thorough');
+  console.log('PASS: blocks are symmetric, bans survive deletion, reports persist');
 } catch (error: any) {
   console.error('FAIL:', error.message);
   process.exitCode = 1;

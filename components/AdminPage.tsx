@@ -177,7 +177,7 @@ const ReportsCard: React.FC<{ authToken: string }> = ({ authToken }) => {
                 disabled={busyId === report.id}
                 className="bg-red-700 hover:bg-red-600 text-white"
               >
-                Actioned
+                Ban this player
               </AdminButton>
             </div>
           </div>
