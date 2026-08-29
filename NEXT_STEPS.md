@@ -22,7 +22,11 @@ Locally: `npm run build && npm start`, then http://localhost:3001. Admin is at
   the supervisor and fills the log with EADDRINUSE.
 - **`PORT=3002`**, because an unrelated app on the same box has held 3001 since
   before this deploy. The default in the README would collide.
-- Deploy is `git pull && npm run build && pm2 restart turing`. Env comes from
+- Deploy is `git pull && npm run build && pm2 restart turing`. Schema changes
+  apply themselves on boot from `runMigrations` in `server/database/db.ts`, so
+  there is never a separate migration step - but read `pm2 logs turing` after a
+  restart, because a migration that throws is caught and ignored by design.
+- Env comes from
   `.env.local` via `--env-file`, which node reads at startup, so any restart
   picks up an edit; pm2's `--update-env` is unrelated and not needed.
 - Stripe lives in its **own Stripe account**, separate from the other sites on
@@ -291,6 +295,11 @@ bot.
 - **Guest identity is self-asserted.** Clearing localStorage yields a fresh
   identity. Fine for persistence, not sufficient for a money-carrying
   leaderboard — that needs real accounts, which exist.
+- **An IP ban catches a household, not a person.** A phone switching to mobile
+  data walks straight past it, and a shared connection punishes whoever else is
+  on it. It moves evasion from trivial to annoying, which is the right ceiling
+  until bans are actually seen being evaded; device fingerprinting is the next
+  rung and is not worth its complexity or its privacy cost before then.
 - **Auth reloads the page** rather than reconnecting the socket in place.
   One line, and correct, versus fiddly listener re-registration.
 - **`admin-config.json` is gitignored** because it holds API keys. The prompts
