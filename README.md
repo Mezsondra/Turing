@@ -147,6 +147,17 @@ frontend from its own origin. If the bundle carries `http://localhost:3001`
 instead of the server and every page, admin included, reports "Failed to
 connect to server". Set `CLIENT_URL` to your public HTTPS URL.
 
+To deploy a later change, install first - a commit that adds a dependency will
+otherwise fail the build against a stale `node_modules`:
+
+```bash
+git pull && npm install && npm run build && pm2 restart turing
+```
+
+`npm run sync` is **not** a deploy command. It builds the mobile app: it bakes
+an absolute `VITE_SERVER_URL` into `dist/`, which is wrong for a server that
+serves the frontend from its own origin.
+
 Then use the files in [deploy/](deploy/):
 
 - `turing.service` - systemd unit (auto-restart, starts on boot)

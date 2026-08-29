@@ -22,7 +22,19 @@ Locally: `npm run build && npm start`, then http://localhost:3001. Admin is at
   the supervisor and fills the log with EADDRINUSE.
 - **`PORT=3002`**, because an unrelated app on the same box has held 3001 since
   before this deploy. The default in the README would collide.
-- Deploy is `git pull && npm run build && pm2 restart turing`. Schema changes
+- Deploy is `git pull && npm install && npm run build && pm2 restart turing`.
+  **The `npm install` is not optional.** Skipping it fails the build outright
+  the first time a commit adds a dependency - `Rollup failed to resolve import`
+  - because the server is building against a node_modules that predates it. A
+  failed build leaves the previous `dist/` untouched, so the site keeps serving
+  and the only symptom is that the deploy did nothing. Use `npm ci` instead if
+  node_modules ever looks inconsistent; it is slower because it recompiles
+  better-sqlite3.
+- **Never run `npm run sync` on the server.** That is the mobile build: it
+  bakes `VITE_SERVER_URL` into `dist/` - which the server must not have, since
+  it serves the frontend from its own origin - and then runs `cap sync`, which
+  wants the native projects. It is a command for your Mac.
+- Schema changes
   apply themselves on boot from `runMigrations` in `server/database/db.ts`, so
   there is never a separate migration step - but read `pm2 logs turing` after a
   restart, because a migration that throws is caught and ignored by design.
