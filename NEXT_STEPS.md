@@ -176,13 +176,62 @@ The server logs `WARNING: no Gemini key - LLM moderation is OFF` at boot when
 nothing is configured. It cannot tell a placeholder key from a real one, so the
 absence of that warning is not proof the classifier works.
 
-### 4. Mobile (Capacitor)
+### 4. Mobile (Capacitor + AdMob)
 
-Needs Xcode / Android Studio locally, so it is a session at your desk.
-Capacitor wraps the existing build; add `@capacitor-community/admob` and
-RevenueCat. Note this is a **second payment integration, not a port** — Apple
-and Google require their own IAP for digital goods, so Stripe stays web-only
-and the entitlement check has to accept either source.
+Capacitor 8 is installed and both platforms are generated. `appId` is
+`com.turingtest.app` - permanent once either store accepts a submission.
+
+**Build it with `npm run sync`, never plain `npm run build`.** The native app
+ships its assets inside the binary and serves them from `capacitor://localhost`,
+so the web build's same-origin API default would point the socket at the phone
+itself. `build:native` bakes in `VITE_SERVER_URL=https://turing-test.app`;
+`sync` does that and then `cap sync`. `dist/` is left holding the *web* build,
+which is what the server serves - so never deploy a `dist/` produced by
+`build:native`.
+
+The server allowlists `capacitor://localhost` and `http://localhost` alongside
+`CLIENT_URL`, for both express and socket.io. Without those the app connects to
+nothing and every screen reports a failure.
+
+**Android needs JDK 21.** Capacitor 8 rejects the system JDK 17 with `invalid
+source release: 21`. Android Studio bundles a 21:
+
+```bash
+cd android && JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+  ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew assembleDebug
+```
+
+**Ads.** `lib/ads.ts` shows an AdMob interstitial in the slot that sells Premium
+on web. `AdModal` renders nothing on native - AdMob draws its own full-screen
+activity - and closes itself when the ad is dismissed *or* fails, so a missing
+fill never traps a player in a modal.
+
+Ad unit ids default to **Google's test units**, and both app ids in the native
+config are test ids too. That is deliberate: serving or clicking your own live
+ads from a dev build suspends the AdMob account, and the ban follows the
+account, not the app. Before submission, replace:
+
+- `VITE_ADMOB_INTERSTITIAL_ID` in `.env.local`, then rebuild - it is a `VITE_*`
+  variable, so it is compiled in, not read at runtime.
+- `GADApplicationIdentifier` in `ios/App/App/Info.plist`.
+- `com.google.android.gms.ads.APPLICATION_ID` in
+  `android/app/src/main/AndroidManifest.xml`.
+
+The SDK aborts on launch if the app id is missing, which is why placeholders
+ship rather than blanks.
+
+**Still to do before either store:**
+
+- **Apple will reject Stripe under guideline 3.1.1.** Digital goods need IAP,
+  and `PremiumModal` sends players to Stripe checkout. This is a second payment
+  integration, not a port: Stripe stays web-only, mobile needs StoreKit or
+  RevenueCat, and the entitlement check has to accept either source. Nothing
+  about this is started.
+- Rewarded video. The format that actually pays in games, and the reason AdMob
+  beats AdSense here. Not built - the interstitial slot already existed, so it
+  went first.
+- App icons, splash screens, store listings, screenshots.
+- A real device test. The simulator does not serve real ads.
 
 Still needed for submission: nothing legal - the privacy policy, terms and the
 24-hour abuse commitment are live. The store listing needs its own copies of

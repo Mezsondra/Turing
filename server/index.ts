@@ -69,6 +69,11 @@ const roundsLeft = (playerId: string | undefined, ipHash: string | null): number
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
+// The native builds serve their bundled assets from these origins, so a mobile
+// app is cross-origin to the API even though the web build is not. Without
+// them the app connects to nothing and every screen reports a failure.
+const ALLOWED_ORIGINS = [CLIENT_URL, 'capacitor://localhost', 'http://localhost'];
+
 
 const app = express();
 const httpServer = createServer(app);
@@ -80,7 +85,7 @@ app.set('trust proxy', 1);
 // Only the site itself may call the API. The built frontend is served from this
 // same origin, so in production this allowlist is a safety net rather than a
 // day-to-day dependency.
-app.use(cors({ origin: CLIENT_URL }));
+app.use(cors({ origin: ALLOWED_ORIGINS }));
 
 // Parse JSON bodies (except for webhooks)
 app.use((req, res, next) => {
@@ -100,7 +105,7 @@ app.use('/api/admin', adminRoutes);
 // Create Socket.io server with CORS
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    origin: ALLOWED_ORIGINS,
     methods: ["GET", "POST"]
   }
 });

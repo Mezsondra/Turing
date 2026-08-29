@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AdSenseAd from './AdSenseAd';
 import { useTranslations } from '../hooks/useTranslations';
+import { isNative, showInterstitial } from '../lib/ads';
 
 interface AdModalProps {
   onClose: () => void;
@@ -18,12 +19,29 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
   const [countdown, setCountdown] = useState(hasAdNetwork ? 10 : 0);
   const { t } = useTranslations();
 
+  // On native the ad IS the interface: AdMob draws its own full-screen
+  // activity, so this modal has nothing to render behind it. Trigger it and
+  // step out of the way. showInterstitial resolves on failure too, so a
+  // missing fill closes the modal rather than trapping the player.
+  useEffect(() => {
+    if (!isNative()) return;
+    let cancelled = false;
+    showInterstitial().finally(() => {
+      if (!cancelled) onClose();
+    });
+    return () => { cancelled = true; };
+  }, [onClose]);
+
   useEffect(() => {
     if (countdown > 0) {
       const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
       return () => clearTimeout(timer);
     }
   }, [countdown]);
+
+  // After every hook, never between them: an early return above the countdown
+  // effect would change the hook count between renders.
+  if (isNative()) return null;
 
   return (
     <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">

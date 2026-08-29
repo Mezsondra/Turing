@@ -10,9 +10,16 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "tsx --env-file .env.local server/index.ts",
-    "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts && tsx server/retry.test.ts && tsx server/moderation.test.ts && tsx server/safety.test.ts && tsx server/humanTiming.test.ts && tsx server/persona.test.ts && tsx server/subscriptionStatus.test.ts && tsx server/freeRounds.test.ts && tsx server/auth/loginCode.test.ts"
+    "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts && tsx server/retry.test.ts && tsx server/moderation.test.ts && tsx server/safety.test.ts && tsx server/humanTiming.test.ts && tsx server/persona.test.ts && tsx server/subscriptionStatus.test.ts && tsx server/freeRounds.test.ts && tsx server/auth/loginCode.test.ts",
+    "build:native": "VITE_SERVER_URL=https://turing-test.app vite build",
+    "sync": "npm run build:native && cap sync"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^8.1.0",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
     "@google/genai": "^1.28.0",
     "@heroicons/react": "^2.2.0",
     "bcryptjs": "^2.4.3",
