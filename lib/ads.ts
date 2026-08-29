@@ -19,12 +19,23 @@ const TEST_INTERSTITIAL = {
   android: 'ca-app-pub-3940256099942544/1033173712',
 };
 
+const TEST_REWARDED = {
+  ios: 'ca-app-pub-3940256099942544/1712485313',
+  android: 'ca-app-pub-3940256099942544/5224354917',
+};
+
 export const isNative = (): boolean => Capacitor.isNativePlatform();
 
 const interstitialId = (): string => {
   const configured = import.meta.env.VITE_ADMOB_INTERSTITIAL_ID;
   if (configured) return configured;
   return Capacitor.getPlatform() === 'ios' ? TEST_INTERSTITIAL.ios : TEST_INTERSTITIAL.android;
+};
+
+const rewardedId = (): string => {
+  const configured = import.meta.env.VITE_ADMOB_REWARDED_ID;
+  if (configured) return configured;
+  return Capacitor.getPlatform() === 'ios' ? TEST_REWARDED.ios : TEST_REWARDED.android;
 };
 
 let initialized = false;
@@ -60,6 +71,32 @@ export async function initAds(): Promise<void> {
     } catch {
       // Never block the game on a consent prompt.
     }
+  }
+}
+
+/**
+ * Shows a rewarded video. Resolves true only if the ad ran to the point where
+ * AdMob reports a reward - which is a hint for the UI, not the grant itself.
+ * The rounds are credited by AdMob calling /api/ads/reward directly, because a
+ * client claiming it watched an ad is not evidence of anything.
+ */
+export async function showRewarded(playerId: string): Promise<boolean> {
+  if (!isNative()) return false;
+
+  try {
+    const { AdMob } = await import('@capacitor-community/admob');
+    await initAds();
+    await AdMob.prepareRewardVideoAd({
+      adId: rewardedId(),
+      // Carried through to the SSV callback, and the only thing tying an ad
+      // view to an account.
+      ssv: { customData: playerId },
+    });
+    const reward = await AdMob.showRewardVideoAd();
+    return !!reward;
+  } catch (error) {
+    console.warn('Rewarded video unavailable:', error);
+    return false;
   }
 }
 

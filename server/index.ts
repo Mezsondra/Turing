@@ -14,6 +14,7 @@ import authRoutes from './routes/auth.js';
 import paymentRoutes from './routes/payment.js';
 import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
+import adsRoutes from './routes/ads.js';
 import { adminConfigService } from './adminConfig.js';
 import { rateLimit, hitLimit } from './rateLimit.js';
 import { moderateMessage, classifyMessage } from './moderation.js';
@@ -64,6 +65,7 @@ const roundsLeft = (playerId: string | undefined, ipHash: string | null): number
     caps: adminConfigService.getFreeRounds(),
     usedByPlayer: playerId ? db.getRoundStartCount(playerId) : 0,
     usedByIp: ipHash ? db.getRoundStartCountByIp(ipHash) : 0,
+    bonusRounds: playerId ? db.getBonusRounds(playerId) : 0,
   });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +103,9 @@ app.use('/api/auth', rateLimit(10, 60_000), authRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/admin', adminRoutes);
+// Google calls this one, not a browser, so it sits outside the CORS allowlist
+// and outside the auth middleware. The AdMob signature is its authentication.
+app.use('/api/ads', adsRoutes);
 
 // Create Socket.io server with CORS
 const io = new Server(httpServer, {
@@ -143,6 +148,9 @@ const sendStats = (socketId: string, playerId: string) => {
   const remaining = roundsLeft(playerId, socketToIp.get(socketId) ?? null);
 
   io.to(socketId).emit('stats', {
+    // The client needs this to tag a rewarded ad, and it is not a secret: it
+    // already identifies every socket the player opens.
+    playerId,
     roundsLeft: Number.isFinite(remaining) ? remaining : null,
     score: player.score,
     gamesPlayed: player.games_played,
@@ -447,6 +455,17 @@ io.on('connection', async (socket: Socket) => {
     } catch (error) {
       console.error('Error in send-message:', error);
       socket.emit('error', { message: 'Failed to send message' });
+    }
+  });
+
+  // After a rewarded video the grant arrives out of band, from Google calling
+  // /api/ads/reward. The client has no way to know when that lands, so it asks.
+  socket.on('refresh-stats', () => {
+    try {
+      const playerId = socketToPlayer.get(socket.id);
+      if (playerId) sendStats(socket.id, playerId);
+    } catch (error) {
+      console.error('Error refreshing stats:', error);
     }
   });
 

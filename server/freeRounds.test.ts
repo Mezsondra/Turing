@@ -3,7 +3,10 @@ import assert from 'assert';
 import { roundsLeft, type FreeRoundCaps } from './freeRounds.js';
 
 const caps: FreeRoundCaps = { guest: 5, member: 10, guestPerIp: 20 };
-const base = { ipHash: 'ip', isPremium: false, isGuest: true, caps, usedByPlayer: 0, usedByIp: 0 };
+const base = {
+  ipHash: 'ip', isPremium: false, isGuest: true, caps,
+  usedByPlayer: 0, usedByIp: 0, bonusRounds: 0,
+};
 
 try {
   // The hole this replaced: an unidentifiable client used to get Infinity, so
@@ -26,6 +29,31 @@ try {
   assert.strictEqual(roundsLeft({ ...base, playerId: 'g', usedByPlayer: 4 }), 1);
   assert.strictEqual(roundsLeft({ ...base, playerId: 'g', usedByPlayer: 5 }), 0);
   assert.strictEqual(roundsLeft({ ...base, playerId: 'g', usedByPlayer: 99 }), 0, 'never negative');
+
+  // Rewarded video. An exhausted player who watches ads gets exactly what they
+  // earned, and the balance still cannot go negative.
+  assert.strictEqual(
+    roundsLeft({ ...base, playerId: 'g', usedByPlayer: 5, bonusRounds: 3 }),
+    3,
+    'a spent guest gets back exactly what they watched'
+  );
+  assert.strictEqual(
+    roundsLeft({ ...base, playerId: 'g', usedByPlayer: 7, bonusRounds: 3 }),
+    1,
+    'bonus rounds are spent like any other'
+  );
+  assert.strictEqual(
+    roundsLeft({ ...base, playerId: 'g', usedByPlayer: 99, bonusRounds: 3 }),
+    0,
+    'still never negative'
+  );
+  // Without lifting the IP backstop too, a guest at the address cap would watch
+  // ads and receive nothing for them.
+  assert.strictEqual(
+    roundsLeft({ ...base, playerId: 'g', usedByPlayer: 0, usedByIp: 20, bonusRounds: 2 }),
+    2,
+    'bonus rounds lift the IP backstop as well'
+  );
 
   // The IP backstop: a fresh device id on an exhausted address gets nothing.
   assert.strictEqual(

@@ -13,7 +13,8 @@ interface MatchedEvent {
 }
 
 export interface StatsEvent {
-  /** Rounds remaining today, or null when unlimited (premium). */
+  /** Server-side identity, used to tag a rewarded ad for SSV. */
+  playerId: string;
   /** Free rounds remaining for good; null means unlimited (premium). */
   roundsLeft: number | null;
   score: number;
@@ -196,6 +197,11 @@ export class SocketService {
   /** Fires when a human partner guessed you were a bot - you fooled them. */
   onPartnerVerdict(callback: (data: { fooledPartner: boolean }) => void): () => void {
     return this.subscribe('partner-verdict', callback);
+  }
+
+  /** Pull a fresh round balance, e.g. after a rewarded ad was credited. */
+  refreshStats(): void {
+    this.socket?.emit('refresh-stats');
   }
 
   /** Fires when a suspended player tries to start a round. */

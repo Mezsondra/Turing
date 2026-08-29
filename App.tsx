@@ -226,7 +226,11 @@ const App: React.FC = () => {
 
       {modal === 'ad' && <AdModal onClose={dismissAd} onUpgrade={openPremium} />}
       {modal === 'premium' && (
-        <PremiumModal onClose={() => setModal('none')} onUpgrade={handleUpgrade} />
+        <PremiumModal
+          onClose={() => setModal('none')}
+          onUpgrade={handleUpgrade}
+          playerId={scoreData?.playerId}
+        />
       )}
       {modal === 'auth' && (
         <AuthModal onClose={() => setModal('none')} reason={t('login_to_upgrade')} />

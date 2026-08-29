@@ -27,6 +27,8 @@ export interface RoundsLeftInput {
   usedByPlayer: number;
   /** Rounds started from this IP by guests, ever. */
   usedByIp: number;
+  /** Extra rounds earned by watching rewarded ads. */
+  bonusRounds: number;
 }
 
 export function roundsLeft(input: RoundsLeftInput): number {
@@ -36,7 +38,7 @@ export function roundsLeft(input: RoundsLeftInput): number {
 
   if (input.isPremium) return Infinity;
 
-  const cap = input.isGuest ? input.caps.guest : input.caps.member;
+  const cap = (input.isGuest ? input.caps.guest : input.caps.member) + input.bonusRounds;
   let left = Math.max(0, cap - input.usedByPlayer);
 
   // Guests only. A device id costs nothing to remint, so clearing site data
@@ -45,7 +47,12 @@ export function roundsLeft(input: RoundsLeftInput): number {
   // and locking out a member because a flatmate played is worse than the
   // abuse it prevents.
   if (input.isGuest && input.ipHash) {
-    left = Math.min(left, Math.max(0, input.caps.guestPerIp - input.usedByIp));
+    // Bonus rounds lift this too, or a guest who watched three ads would still
+    // be stopped by the backstop and get nothing for them.
+    left = Math.min(
+      left,
+      Math.max(0, input.caps.guestPerIp + input.bonusRounds - input.usedByIp)
+    );
   }
 
   return left;

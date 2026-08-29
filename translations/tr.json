@@ -124,5 +124,8 @@
   "privacy_policy": "Gizlilik",
   "terms_of_service": "Koşullar",
   "agree_notice": "Devam ederek şunları kabul edersiniz:",
-  "banned_message": "Topluluk kurallarını ihlal ettiğiniz için hesabınız askıya alındı. Bunun bir hata olduğunu düşünüyorsanız support@turing-test.app adresine yazın."
+  "banned_message": "Topluluk kurallarını ihlal ettiğiniz için hesabınız askıya alındı. Bunun bir hata olduğunu düşünüyorsanız support@turing-test.app adresine yazın.",
+  "watch_ad_for_rounds": "Daha fazla tur için video izle",
+  "rounds_added": "Turlar eklendi. İyi eğlenceler!",
+  "no_video_available": "Şu anda video yok. Birazdan tekrar deneyin."
 }

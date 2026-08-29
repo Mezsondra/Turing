@@ -77,6 +77,19 @@ export class DatabaseService {
       }
     }
 
+    // Rewarded-video grants. AdMob's transaction_id is the primary key, so a
+    // replayed callback - Google retries on any non-200 - is a no-op at the
+    // database rather than something application code has to remember to check.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS reward_grants (
+        transaction_id TEXT PRIMARY KEY,
+        player_id      TEXT NOT NULL,
+        rounds         INTEGER NOT NULL,
+        created_at     INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_reward_grants_player ON reward_grants(player_id);
+    `);
+
     // Hashed IPs of banned players, kept separately rather than joined out of
     // round_starts: deleteUser nulls that user_id, so a banned player could
     // otherwise lift their own IP ban by deleting their account.
@@ -504,6 +517,24 @@ export class DatabaseService {
         report.transcript || null,
         Date.now()
       );
+  }
+
+  /** Returns false when this transaction was already credited. */
+  grantRewardRounds(transactionId: string, playerId: string, rounds: number): boolean {
+    const result = this.db
+      .prepare(
+        `INSERT OR IGNORE INTO reward_grants (transaction_id, player_id, rounds, created_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(transactionId, playerId, rounds, Date.now());
+    return result.changes > 0;
+  }
+
+  getBonusRounds(playerId: string): number {
+    const row = this.db
+      .prepare('SELECT COALESCE(SUM(rounds), 0) AS total FROM reward_grants WHERE player_id = ?')
+      .get(playerId) as { total: number };
+    return row.total;
   }
 
   getReport(id: string): Record<string, unknown> | undefined {

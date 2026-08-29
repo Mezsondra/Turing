@@ -124,5 +124,8 @@
   "privacy_policy": "Privacy",
   "terms_of_service": "Terms",
   "agree_notice": "By continuing you agree to our",
-  "banned_message": "Your account has been suspended for breaking the community rules. Contact support@turing-test.app if you believe this is a mistake."
+  "banned_message": "Your account has been suspended for breaking the community rules. Contact support@turing-test.app if you believe this is a mistake.",
+  "watch_ad_for_rounds": "Watch a video for more rounds",
+  "rounds_added": "Rounds added. Enjoy!",
+  "no_video_available": "No video available right now. Try again shortly."
 }

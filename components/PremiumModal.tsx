@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { useTranslations } from '../hooks/useTranslations';
 import LoadingSpinner from './LoadingSpinner';
+import { isNative, showRewarded } from '../lib/ads';
+import { socketService } from '../services/socketService';
 
 export type PremiumPlan = 'monthly' | 'yearly' | 'lifetime';
 
 interface PremiumModalProps {
   onClose: () => void;
   onUpgrade: (plan: PremiumPlan) => Promise<void>;
+  /** Server-side identity, needed to tag a rewarded ad. Absent before the
+      first stats event, which is when the rewarded option stays hidden. */
+  playerId?: string;
 }
 
 const Check = () => (
@@ -17,10 +22,29 @@ const Check = () => (
   </div>
 );
 
-const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade }) => {
+const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerId }) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [watching, setWatching] = useState(false);
   const [plan, setPlan] = useState<PremiumPlan>('yearly');
   const { t } = useTranslations();
+
+  const watchForRounds = async () => {
+    if (!playerId) return;
+    setWatching(true);
+    const rewarded = await showRewarded(playerId);
+    setWatching(false);
+
+    if (!rewarded) {
+      alert(t('no_video_available'));
+      return;
+    }
+
+    // The rounds are credited by Google calling our server, not by this
+    // client, so ask for a fresh balance rather than assuming one.
+    socketService.refreshStats();
+    alert(t('rounds_added'));
+    onClose();
+  };
 
   const handleUpgrade = async () => {
     setIsLoading(true);
@@ -114,6 +138,19 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade }) => {
         >
           {isLoading ? <LoadingSpinner /> : t('start_premium')}
         </button>
+
+        {/* Native only: there is no rewarded format on the web build. Placed
+            under the paid CTA rather than beside it - it is the fallback for
+            someone who will not pay today, not a competing offer. */}
+        {isNative() && playerId && (
+          <button
+            onClick={watchForRounds}
+            disabled={watching}
+            className="w-full mt-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-3 px-6 rounded-full transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {watching ? <LoadingSpinner /> : <>▶ {t('watch_ad_for_rounds')}</>}
+          </button>
+        )}
 
         <p className="text-slate-500 text-center text-xs mt-4">
           {plan === 'lifetime' ? t('one_time') : t('cancel_anytime')} · {t('secure_payment')}
