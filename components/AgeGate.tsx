@@ -36,6 +36,19 @@ const AgeGate: React.FC<{ onConfirm: () => void }> = ({ onConfirm }) => {
         >
           {t('age_gate_leave')}
         </a>
+
+        {/* The gate is where use begins, so it is also where the terms are
+            accepted - a link buried in Settings is not agreement. */}
+        <p className="mt-6 text-xs text-slate-500">
+          {t('agree_notice')}{' '}
+          <a href="/terms.html" target="_blank" rel="noopener" className="underline hover:text-slate-300">
+            {t('terms_of_service')}
+          </a>
+          {' · '}
+          <a href="/privacy.html" target="_blank" rel="noopener" className="underline hover:text-slate-300">
+            {t('privacy_policy')}
+          </a>
+        </p>
       </div>
     </div>
   );

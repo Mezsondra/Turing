@@ -120,5 +120,8 @@
   "use_another_email": "Başka bir e-posta kullan",
   "resend_code": "Yeni kod gönder",
   "email_invalid": "Bu bir e-posta adresine benzemiyor.",
-  "google_failed": "Google girişi tamamlanmadı. E-posta kodunu dene."
+  "google_failed": "Google girişi tamamlanmadı. E-posta kodunu dene.",
+  "privacy_policy": "Gizlilik",
+  "terms_of_service": "Koşullar",
+  "agree_notice": "Devam ederek şunları kabul edersiniz:"
 }

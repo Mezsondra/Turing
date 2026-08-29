@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy - Turing Test Challenge</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem;
+         font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+  h1 { font-size: 1.6rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .date { color: #888; margin-top: 0; }
+  code { font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { text-align: left; vertical-align: top; padding: 0.4rem 0.6rem;
+           border-bottom: 1px solid #8884; }
+</style>
+</head>
+<body>
+
+<h1>Privacy Policy</h1>
+<p class="date">Turing Test Challenge &middot; last updated 29 August 2026</p>
+
+<p>This game pairs you with a stranger or with an AI for about a minute, and you
+guess which one you were talking to. This page says exactly what that involves
+for your data. It is short because the game collects little.</p>
+
+<h2>What we store</h2>
+
+<table>
+  <tr><th>Data</th><th>Why</th></tr>
+  <tr><td>A random device ID, generated in your browser</td>
+      <td>So your score and streak survive a refresh without making you sign up.
+      It identifies a browser, not a person.</td></tr>
+  <tr><td>Your score, streak, and one row per round (human or AI, what you
+      guessed, whether you were right)</td>
+      <td>Your stats and history.</td></tr>
+  <tr><td>A one-way hash of your IP address</td>
+      <td>Only to count free rounds against the daily limit. We do not store the
+      address itself and cannot recover it from the hash.</td></tr>
+  <tr><td>If you create an account: your email address, a bcrypt hash of your
+      password, and your chosen username</td>
+      <td>To sign you in. We never store your password itself.</td></tr>
+  <tr><td>If you sign in with Google: your email address, and your name if
+      Google supplies it</td>
+      <td>To sign you in.</td></tr>
+  <tr><td>If you subscribe: your Stripe customer and subscription IDs, your
+      plan, its status and billing period</td>
+      <td>To know whether you have Premium. Card details go to Stripe and never
+      reach us.</td></tr>
+  <tr><td>Your language, sound and vibration settings</td>
+      <td>Stored in your browser only. They never reach our server.</td></tr>
+</table>
+
+<h2>Chat messages</h2>
+
+<p><strong>We do not keep a copy of your conversations.</strong> Messages are
+relayed between the two players in real time and are not written to our
+database. There are exactly two exceptions, and both exist for safety:</p>
+
+<ul>
+  <li>If someone reports a conversation, the transcript they submit is stored
+  with the report so a human can review it.</li>
+  <li>Every message sent to a human partner is checked by an automated
+  classifier. If it flags something, that single message is stored as a
+  moderation record for a human to review.</li>
+</ul>
+
+<p>When your opponent is the AI, your messages are sent to Google's Gemini API
+to generate its replies. Google processes them under its own terms.</p>
+
+<h2>Who else sees your data</h2>
+
+<ul>
+  <li><strong>Google (Gemini API)</strong> - messages in AI matches, and
+  messages checked by the moderation classifier.</li>
+  <li><strong>Google (Sign-In)</strong> - only if you choose to sign in with
+  Google.</li>
+  <li><strong>Stripe</strong> - payment processing. Stripe collects your card
+  details directly; we never receive them.</li>
+  <li><strong>Resend</strong> - delivers your sign-in code email.</li>
+</ul>
+
+<p>We do not sell your data, and we do not share it with advertisers or data
+brokers. There is currently no advertising network in the web version.</p>
+
+<h2>How long we keep it</h2>
+
+<p>Account and game data is kept until you delete your account. Moderation
+records are kept after that: an account deletion must not erase evidence of
+abuse against someone else.</p>
+
+<h2>Deleting your account</h2>
+
+<p>Settings &rarr; Delete Account, in the app. It permanently removes your user
+record, game history, subscription record and blocks. Two things deliberately
+survive: reports filed <em>against</em> you, and the hashed IP used for the free
+round counter - otherwise deleting an account would be a way to reset the daily
+limit.</p>
+
+<p>Deleting your account does not cancel Stripe billing. Cancel first, via
+Settings &rarr; Manage Subscription.</p>
+
+<h2>Your rights</h2>
+
+<p>If you are in the UK, EU, or another region with data protection law, you can
+ask for a copy of your data, ask us to correct it, or ask us to delete it.
+Email the address below and we will respond within 30 days. Deletion is also
+available immediately in the app, above.</p>
+
+<h2>Children</h2>
+
+<p>This app is rated 17+ and is not for children. It puts you in unmoderated
+live chat with strangers. We do not knowingly collect data from anyone under
+17; if you believe a child has an account, email us and we will remove it.</p>
+
+<h2>Security</h2>
+
+<p>Traffic is encrypted with HTTPS. Passwords are stored as bcrypt hashes. Data
+lives on a single server in the United Kingdom.</p>
+
+<h2>Changes</h2>
+
+<p>If this policy changes materially, the date at the top changes and the app
+will say so before you keep playing.</p>
+
+<h2>Contact</h2>
+
+<p>Privacy questions, data requests and abuse reports:
+<a href="mailto:support@turing-test.app">support@turing-test.app</a>.
+Abuse reports get a response within 24 hours.</p>
+
+<p><a href="/terms.html">Terms of Service</a> &middot; <a href="/">Back to the game</a></p>
+
+</body>
+</html>

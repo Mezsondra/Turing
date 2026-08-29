@@ -120,5 +120,8 @@
   "use_another_email": "Use a different email",
   "resend_code": "Send another code",
   "email_invalid": "That does not look like an email address.",
-  "google_failed": "Google sign-in did not complete. Try the email code instead."
+  "google_failed": "Google sign-in did not complete. Try the email code instead.",
+  "privacy_policy": "Privacy",
+  "terms_of_service": "Terms",
+  "agree_notice": "By continuing you agree to our"
 }

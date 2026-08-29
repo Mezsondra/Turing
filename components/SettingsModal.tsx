@@ -114,6 +114,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
               </button>
             </div>
           )}
+
+          <div className="pt-4 mt-2 border-t border-slate-700 flex justify-center gap-4 text-xs text-slate-400">
+            <a href="/privacy.html" target="_blank" rel="noopener" className="hover:text-slate-200">
+              {t('privacy_policy')}
+            </a>
+            <a href="/terms.html" target="_blank" rel="noopener" className="hover:text-slate-200">
+              {t('terms_of_service')}
+            </a>
+          </div>
         </div>
       </div>
     </div>
