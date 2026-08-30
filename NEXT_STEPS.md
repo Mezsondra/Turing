@@ -223,11 +223,17 @@ config are test ids too. That is deliberate: serving or clicking your own live
 ads from a dev build suspends the AdMob account, and the ban follows the
 account, not the app. Before submission, replace:
 
-- `VITE_ADMOB_INTERSTITIAL_ID` in `.env.local`, then rebuild - it is a `VITE_*`
-  variable, so it is compiled in, not read at runtime.
-- `GADApplicationIdentifier` in `ios/App/App/Info.plist`.
+- The four `VITE_ADMOB_*_ANDROID` / `_IOS` unit ids in `.env.local`, then
+  rebuild - they are `VITE_*` variables, compiled in rather than read at
+  runtime. Ad unit ids are per-platform and per-format: create an
+  **interstitial** and a **rewarded** unit in each app. A banner unit is not
+  used by this code and cannot stand in for either.
+- `GADApplicationIdentifier` in `ios/App/App/Info.plist` - still Google's test
+  id, because the iOS app has not been created in AdMob yet. It needs its own
+  AdMob app; ids never cross platforms.
 - `com.google.android.gms.ads.APPLICATION_ID` in
-  `android/app/src/main/AndroidManifest.xml`.
+  `android/app/src/main/AndroidManifest.xml` - **done**,
+  `ca-app-pub-7095716440087100~6371038008`.
 
 The SDK aborts on launch if the app id is missing, which is why placeholders
 ship rather than blanks.

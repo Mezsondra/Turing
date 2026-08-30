@@ -34,12 +34,12 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- Google's TEST app id. The AdMob SDK aborts on launch if this is
-             missing, so it ships as a working placeholder. Swap for the real
-             ca-app-pub-...~... before any store submission. -->
+        <!-- The real AdMob app id for the Android app. iOS has a different
+             one, in ios/App/App/Info.plist - AdMob ids never cross platforms.
+             The SDK aborts on launch if this is missing. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-7095716440087100~6371038008"/>
     </application>
 
     <!-- Permissions -->

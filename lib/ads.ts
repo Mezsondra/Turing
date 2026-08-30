@@ -26,17 +26,32 @@ const TEST_REWARDED = {
 
 export const isNative = (): boolean => Capacitor.isNativePlatform();
 
-const interstitialId = (): string => {
-  const configured = import.meta.env.VITE_ADMOB_INTERSTITIAL_ID;
-  if (configured) return configured;
-  return Capacitor.getPlatform() === 'ios' ? TEST_INTERSTITIAL.ios : TEST_INTERSTITIAL.android;
-};
+/**
+ * AdMob ad unit ids are per-platform - an Android unit id is meaningless on
+ * iOS and simply never fills. Each platform needs its own env var, written out
+ * literally because vite substitutes `import.meta.env.X` at build time and
+ * cannot resolve a computed key.
+ */
+const unitId = (
+  ios: string | undefined,
+  android: string | undefined,
+  test: { ios: string; android: string }
+): string =>
+  Capacitor.getPlatform() === 'ios' ? ios || test.ios : android || test.android;
 
-const rewardedId = (): string => {
-  const configured = import.meta.env.VITE_ADMOB_REWARDED_ID;
-  if (configured) return configured;
-  return Capacitor.getPlatform() === 'ios' ? TEST_REWARDED.ios : TEST_REWARDED.android;
-};
+const interstitialId = (): string =>
+  unitId(
+    import.meta.env.VITE_ADMOB_INTERSTITIAL_ID_IOS,
+    import.meta.env.VITE_ADMOB_INTERSTITIAL_ID_ANDROID,
+    TEST_INTERSTITIAL
+  );
+
+const rewardedId = (): string =>
+  unitId(
+    import.meta.env.VITE_ADMOB_REWARDED_ID_IOS,
+    import.meta.env.VITE_ADMOB_REWARDED_ID_ANDROID,
+    TEST_REWARDED
+  );
 
 let initialized = false;
 
