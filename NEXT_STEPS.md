@@ -228,12 +228,21 @@ account, not the app. Before submission, replace:
   runtime. Ad unit ids are per-platform and per-format: create an
   **interstitial** and a **rewarded** unit in each app. A banner unit is not
   used by this code and cannot stand in for either.
-- `GADApplicationIdentifier` in `ios/App/App/Info.plist` - still Google's test
-  id, because the iOS app has not been created in AdMob yet. It needs its own
-  AdMob app; ids never cross platforms.
+- `GADApplicationIdentifier` in `ios/App/App/Info.plist` - **done**.
 - `com.google.android.gms.ads.APPLICATION_ID` in
-  `android/app/src/main/AndroidManifest.xml` - **done**,
-  `ca-app-pub-7095716440087100~6371038008`.
+  `android/app/src/main/AndroidManifest.xml` - **done**.
+
+**iOS is fully configured. Android still serves test ads** - its interstitial
+and rewarded units have not been created (only a banner unit, which this code
+does not use), so `VITE_ADMOB_*_ANDROID` are unset and fall back to Google's
+test units. The Android build therefore earns nothing until those two units
+exist and the ids are added.
+
+Unit ids live in `.env.local` on the build machine and are deliberately **not
+committed**: this repo is public, and a published unit id can be served from
+someone else's app to generate invalid traffic against your account. If
+`.env.local` is ever lost, they are in the AdMob console under each app's ad
+units - nothing is unrecoverable.
 
 The SDK aborts on launch if the app id is missing, which is why placeholders
 ship rather than blanks.
