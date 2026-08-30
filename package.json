@@ -12,7 +12,11 @@
     "start": "tsx --env-file .env.local server/index.ts",
     "test": "tsx --env-file .env.local server/matchmaking.test.ts && tsx server/scoring.test.ts && tsx server/migration.test.ts && tsx server/retry.test.ts && tsx server/moderation.test.ts && tsx server/safety.test.ts && tsx server/humanTiming.test.ts && tsx server/persona.test.ts && tsx server/subscriptionStatus.test.ts && tsx server/freeRounds.test.ts && tsx server/auth/loginCode.test.ts && tsx server/adReward.test.ts && tsx server/revenueCat.test.ts",
     "build:native": "VITE_SERVER_URL=https://turing-test.app vite build",
-    "sync": "npm run build:native && cap sync"
+    "sync": "npm run build:native && cap sync && npm run verify:native",
+    "verify:native": "node scripts/verify-native.mjs",
+    "android:apk": "npm run sync && cd android && JAVA_HOME=\"${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}\" ./gradlew assembleDebug",
+    "android:bundle": "npm run sync && cd android && JAVA_HOME=\"${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}\" ./gradlew bundleRelease",
+    "ios:open": "npm run sync && open ios/App/App.xcodeproj"
   },
   "dependencies": {
     "@capacitor-community/admob": "^8.1.0",
