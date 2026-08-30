@@ -249,11 +249,45 @@ ship rather than blanks.
 
 **Still to do before either store:**
 
-- **Apple will reject Stripe under guideline 3.1.1.** Digital goods need IAP,
-  and `PremiumModal` sends players to Stripe checkout. This is a second payment
-  integration, not a port: Stripe stays web-only, mobile needs StoreKit or
-  RevenueCat, and the entitlement check has to accept either source. Nothing
-  about this is started.
+- **In-app purchases are built (RevenueCat) but not yet configured.** Code is
+  done; the consoles are not. Both stores require their own billing for digital
+  goods - this is a Play rule as well as an Apple one, so Stripe is unusable in
+  both apps, not just on iOS.
+
+  What is left, all of it console work:
+
+  1. App Store Connect: create the three products - monthly, yearly and a
+     **non-consumable** for lifetime. Play Console: two subscriptions and one
+     one-time product.
+  2. RevenueCat: connect both stores, create an entitlement, and attach the
+     products to packages typed `MONTHLY`, `ANNUAL` and `LIFETIME` - the client
+     looks them up by `packageType`, so a custom package identifier will simply
+     not be found.
+  3. `VITE_REVENUECAT_API_KEY_IOS` and `_ANDROID` in `.env.local`, then rebuild.
+     **Without a key the app falls back to Stripe checkout**, which is exactly
+     what gets a submission rejected - so an unset key is a silent failure with
+     an expensive symptom.
+  4. `REVENUECAT_WEBHOOK_SECRET` on the server, and the same value in
+     RevenueCat → Integrations → Webhooks alongside
+     `https://turing-test.app/api/revenuecat/webhook`. Unset, the endpoint
+     refuses everything - which is the safe direction, but it means purchases
+     succeed in the store and never unlock anything.
+
+  Entitlement stays source-agnostic: `isPremiumUser` still just checks
+  `plan='premium' AND status='active'`, and a mobile purchase writes the same
+  row with `source='revenuecat'`. `setMobileEntitlement` deliberately leaves the
+  `stripe_*` columns alone, since somebody can buy on the web and later on a
+  phone.
+
+  `CANCELLATION` from RevenueCat means auto-renew was switched off, **not** that
+  access ended - the customer keeps what they paid for until `EXPIRATION`.
+  Treating it as a downgrade would be the c980386 bug arriving by a different
+  door, and `revenueCat.test.ts` exists to keep it from happening.
+
+- **Known gap, pre-existing:** `isPremiumUser` accepts only `status='active'`,
+  so a row with `status='trialing'` gets no premium. Harmless today because no
+  trial is configured anywhere, but it becomes a live bug the moment one is -
+  in either Stripe or the stores.
 - Rewarded video is built, but **it grants nothing until you configure SSV**.
   In the AdMob console open the rewarded ad unit → Server-side verification and
   set the callback to `https://turing-test.app/api/ads/reward`. Without it the

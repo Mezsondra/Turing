@@ -15,6 +15,7 @@ import paymentRoutes from './routes/payment.js';
 import gameRoutes from './routes/game.js';
 import adminRoutes from './routes/admin.js';
 import adsRoutes from './routes/ads.js';
+import revenueCatRoutes from './routes/revenuecat.js';
 import { adminConfigService } from './adminConfig.js';
 import { rateLimit, hitLimit } from './rateLimit.js';
 import { moderateMessage, classifyMessage } from './moderation.js';
@@ -106,6 +107,9 @@ app.use('/api/admin', adminRoutes);
 // Google calls this one, not a browser, so it sits outside the CORS allowlist
 // and outside the auth middleware. The AdMob signature is its authentication.
 app.use('/api/ads', adsRoutes);
+// Same shape as the ads callback: called by a service, not a browser, and
+// authenticated by a shared secret rather than by CORS or a session.
+app.use('/api/revenuecat', revenueCatRoutes);
 
 // Create Socket.io server with CORS
 const io = new Server(httpServer, {

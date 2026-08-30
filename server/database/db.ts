@@ -100,6 +100,15 @@ export class DatabaseService {
       );
     `);
 
+    // Which billing system owns this row. Apple and Google require their own
+    // billing for digital goods, so a mobile purchase never touches Stripe.
+    // Existing rows are all Stripe, hence the default.
+    try {
+      this.db.exec("ALTER TABLE subscriptions ADD COLUMN source TEXT DEFAULT 'stripe'");
+    } catch {
+      // Already present.
+    }
+
     // Ban marker. NULL means not banned; a timestamp is when they were banned.
     try {
       this.db.exec('ALTER TABLE users ADD COLUMN banned_at INTEGER');
@@ -340,6 +349,43 @@ export class DatabaseService {
     );
 
     return { ...subscription, created_at: now, updated_at: now };
+  }
+
+  /**
+   * Upsert the entitlement a mobile store reports. Deliberately does not touch
+   * the stripe_* columns: a player could plausibly have bought on the web and
+   * later on a phone, and clearing one because the other spoke would revoke
+   * access somebody paid for.
+   */
+  setMobileEntitlement(
+    userId: string,
+    status: 'active' | 'canceled',
+    expiresAtMs: number | null
+  ): void {
+    const now = Date.now();
+    const existing = this.getSubscriptionByUserId(userId);
+    const plan = status === 'active' ? 'premium' : 'free';
+    const rowStatus = status === 'active' ? 'active' : 'expired';
+
+    if (existing) {
+      this.db
+        .prepare(
+          `UPDATE subscriptions
+              SET plan = ?, status = ?, source = 'revenuecat',
+                  current_period_end = ?, updated_at = ?
+            WHERE user_id = ?`
+        )
+        .run(plan, rowStatus, expiresAtMs, now, userId);
+      return;
+    }
+
+    this.db
+      .prepare(
+        `INSERT INTO subscriptions
+           (id, user_id, status, plan, source, current_period_end, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'revenuecat', ?, ?, ?)`
+      )
+      .run(`rc_${userId}`, userId, rowStatus, plan, expiresAtMs, now, now);
   }
 
   getSubscriptionByUserId(userId: string): Subscription | undefined {

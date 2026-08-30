@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslations } from '../hooks/useTranslations';
 import LoadingSpinner from './LoadingSpinner';
 import { isNative, showRewarded } from '../lib/ads';
+import { canPurchaseNatively, purchase, restore } from '../lib/purchases';
 import { socketService } from '../services/socketService';
 
 export type PremiumPlan = 'monthly' | 'yearly' | 'lifetime';
@@ -49,10 +50,42 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
   const handleUpgrade = async () => {
     setIsLoading(true);
     try {
+      // Apple and Google both require their own billing for digital goods, so
+      // the Stripe checkout that serves the web would get the app rejected.
+      if (canPurchaseNatively() && playerId) {
+        const bought = await purchase(playerId, plan);
+        setIsLoading(false);
+        if (!bought) return; // the player backed out; not an error
+
+        // Entitlement arrives by webhook, not from this client, so ask rather
+        // than assume - and say "may take a moment" instead of lying about it.
+        socketService.refreshStats();
+        alert(t('purchase_processing'));
+        onClose();
+        return;
+      }
+
       await onUpgrade(plan);
     } catch (error: any) {
       console.error('Upgrade error:', error);
       alert(error?.message || t('auth_failed'));
+      setIsLoading(false);
+    }
+  };
+
+  // Apple requires a visible restore path, and it is the only way a lifetime
+  // unlock survives a reinstall or a new device.
+  const handleRestore = async () => {
+    if (!playerId) return;
+    setIsLoading(true);
+    try {
+      const found = await restore(playerId);
+      socketService.refreshStats();
+      alert(found ? t('purchase_restored') : t('nothing_to_restore'));
+      if (found) onClose();
+    } catch (error: any) {
+      alert(error?.message || t('auth_failed'));
+    } finally {
       setIsLoading(false);
     }
   };
@@ -149,6 +182,16 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
             className="w-full mt-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold py-3 px-6 rounded-full transition-all disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {watching ? <LoadingSpinner /> : <>▶ {t('watch_ad_for_rounds')}</>}
+          </button>
+        )}
+
+        {canPurchaseNatively() && playerId && (
+          <button
+            onClick={handleRestore}
+            disabled={isLoading}
+            className="w-full mt-3 text-slate-400 hover:text-slate-200 text-sm py-2 disabled:opacity-50"
+          >
+            {t('restore_purchases')}
           </button>
         )}
 

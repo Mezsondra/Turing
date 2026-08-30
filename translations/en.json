@@ -127,5 +127,9 @@
   "banned_message": "Your account has been suspended for breaking the community rules. Contact support@turing-test.app if you believe this is a mistake.",
   "watch_ad_for_rounds": "Watch a video for more rounds",
   "rounds_added": "Rounds added. Enjoy!",
-  "no_video_available": "No video available right now. Try again shortly."
+  "no_video_available": "No video available right now. Try again shortly.",
+  "restore_purchases": "Restore purchases",
+  "purchase_restored": "Your purchase has been restored.",
+  "nothing_to_restore": "No previous purchase found for this account.",
+  "purchase_processing": "Purchase received. It may take a moment to unlock."
 }
