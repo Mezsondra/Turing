@@ -15,7 +15,7 @@ import { GameState } from './types';
 import { socketService } from './services/socketService';
 
 const App: React.FC = () => {
-  const { isAuthenticated, isPremium, upgrade } = useAuth();
+  const { isAuthenticated, isPremium, isLoading: isAuthLoading, upgrade } = useAuth();
   const { t } = useTranslations();
   const [modal, setModal] = useState<'none' | 'ad' | 'premium' | 'auth'>('none');
   const [pendingAd, setPendingAd] = useState(false);
@@ -47,9 +47,13 @@ const App: React.FC = () => {
     timesFooled: 0,
   });
 
-  // Score and stats come from the server, which owns them. The client never
-  // computes a score - it only displays what it is told.
+  // Score and stats come from the server, which owns them. Wait until a stored
+  // auth token has been verified before connecting: otherwise a returning
+  // account can receive `round-limit` while isAuthenticated is still briefly
+  // false and be sent straight back to the sign-in modal.
   useEffect(() => {
+    if (isAuthLoading) return;
+
     // Connect at app start, not when the chat opens, so the welcome screen can
     // show the player's streak - which is what makes it worth coming back for.
     socketService.connect().catch((error) => console.error('Connection failed:', error));
@@ -106,7 +110,14 @@ const App: React.FC = () => {
       unsubscribeVerdict();
       unsubscribeGuess();
     };
-  }, []);
+  }, [isAuthLoading]);
+
+  // Recover if an auth surface was opened during the verification frame (for
+  // example by a very fast click): once the account resolves, its destination
+  // is Premium, never another sign-in form.
+  useEffect(() => {
+    if (modal === 'auth' && isAuthenticated) setModal('premium');
+  }, [isAuthenticated, modal]);
 
   const handleStartGame = () => {
     setFooledPartner(false);
