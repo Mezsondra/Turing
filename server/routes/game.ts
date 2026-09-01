@@ -9,15 +9,16 @@ const router = express.Router();
 router.get('/stats', requireAuth, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
-    const stats = db.getUserStats(userId);
-    const totalGames = db.getTotalGameCount(userId);
     const user = db.getUserById(userId);
+    const totalGames = user?.games_played ?? 0;
+    const correctGames = user?.games_won ?? 0;
+    const accuracy = totalGames > 0 ? (correctGames / totalGames) * 100 : 0;
 
     res.json({
       stats: {
-        total: stats.total,
-        correct: stats.correct,
-        accuracy: Math.round(stats.accuracy * 10) / 10,
+        total: totalGames,
+        correct: correctGames,
+        accuracy: Math.round(accuracy * 10) / 10,
         totalGames,
         score: user?.score || 0,
         gamesPlayed: user?.games_played || 0,
@@ -71,7 +72,7 @@ router.put('/session/:sessionId', requireAuth, async (req: AuthRequest, res) => 
     }
 
     const user = db.getUserById(userId);
-    const totalGames = db.getTotalGameCount(userId);
+    const totalGames = user?.games_played ?? 0;
 
     res.json({
       success: true,

@@ -1,6 +1,5 @@
 import Stripe from 'stripe';
 import { db } from '../database/db.js';
-import { v4 as uuidv4 } from 'uuid';
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
@@ -66,8 +65,7 @@ export class StripeService {
         throw new Error(`No Stripe price configured for the ${plan} plan`);
       }
       // Check if user already has a customer ID
-      const subscription = db.getSubscriptionByUserId(userId);
-      let customerId = subscription?.stripe_customer_id;
+      let customerId = db.getStripeCustomerId(userId);
 
       // Create customer if doesn't exist
       if (!customerId) {
@@ -91,7 +89,9 @@ export class StripeService {
         metadata: { userId, plan },
         // Subscription webhooks arrive without the session metadata, so copy it
         // onto the subscription itself or the handler cannot tell whose it is.
-        ...(plan === 'lifetime' ? {} : { subscription_data: { metadata: { userId, plan } } }),
+        ...(plan === 'lifetime'
+          ? { payment_intent_data: { metadata: { userId, plan } } }
+          : { subscription_data: { metadata: { userId, plan } } }),
       });
 
       return session.url!;
@@ -103,13 +103,13 @@ export class StripeService {
 
   async createPortalSession(userId: string): Promise<string> {
     try {
-      const subscription = db.getSubscriptionByUserId(userId);
-      if (!subscription?.stripe_customer_id) {
+      const customerId = db.getStripeCustomerId(userId);
+      if (!customerId) {
         throw new Error('No Stripe customer found');
       }
 
       const session = await this.stripe.billingPortal.sessions.create({
-        customer: subscription.stripe_customer_id,
+        customer: customerId,
         // There is no /settings route - the app is a single screen - so send
         // them back to where they started.
         return_url: process.env.CLIENT_URL,
@@ -139,16 +139,20 @@ export class StripeService {
     // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed':
-        await this.handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        await this.handleCheckoutCompleted(event, event.data.object as Stripe.Checkout.Session);
         break;
 
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionUpdated(event, event.data.object as Stripe.Subscription);
         break;
 
       case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        await this.handleSubscriptionDeleted(event, event.data.object as Stripe.Subscription);
+        break;
+
+      case 'charge.refunded':
+        await this.handleLifetimeRefund(event, event.data.object as Stripe.Charge);
         break;
 
       default:
@@ -156,100 +160,137 @@ export class StripeService {
     }
   }
 
-  private async handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  private async handleCheckoutCompleted(event: Stripe.Event, session: Stripe.Checkout.Session): Promise<void> {
     const userId = session.metadata?.userId;
     if (!userId) {
       console.error('No userId in session metadata');
       return;
     }
 
-    const customerId = session.customer as string;
-    const subscriptionId = (session.subscription as string) || undefined;
+    const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
+    const subscriptionId = typeof session.subscription === 'string'
+      ? session.subscription
+      : session.subscription?.id;
 
     // A lifetime unlock is a one-off payment: there is no subscription to read,
     // and no period end, which is what makes it never expire.
-    let periodStart: number | undefined;
-    let periodEnd: number | undefined;
+    let periodStart: number | null = null;
+    let periodEnd: number | null = null;
+    let status: 'active' | 'trialing' | 'canceled' | null = 'active';
 
     if (subscriptionId) {
       const stripeSubscription = await this.stripe.subscriptions.retrieve(subscriptionId);
       periodStart = stripeSubscription.current_period_start * 1000;
       periodEnd = stripeSubscription.current_period_end * 1000;
+      status = subscriptionStatus(stripeSubscription.status);
     }
 
-    const fields = {
-      status: 'active' as const,
-      plan: 'premium' as const,
-      stripe_subscription_id: subscriptionId,
-      stripe_customer_id: customerId,
-      current_period_start: periodStart,
-      current_period_end: periodEnd,
-    };
+    const paymentIntentId = typeof session.payment_intent === 'string'
+      ? session.payment_intent
+      : session.payment_intent?.id;
+    const externalKey = subscriptionId || paymentIntentId || session.id;
 
-    const existingSubscription = db.getSubscriptionByUserId(userId);
-    if (existingSubscription) {
-      db.updateSubscription(existingSubscription.id, fields);
-    } else {
-      db.createSubscription({ id: uuidv4(), user_id: userId, ...fields });
-    }
+    db.applyBillingEvent({
+      provider: 'stripe',
+      eventId: event.id,
+      eventType: event.type,
+      occurredAt: event.created * 1000,
+      userId,
+      externalKey,
+      kind: subscriptionId ? 'subscription' : 'lifetime',
+      status: status === 'canceled' ? 'canceled' : status,
+      customerId,
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+    });
 
     console.log(`Premium (${session.metadata?.plan ?? 'unknown'}) activated for user ${userId}`);
   }
 
-  private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
+  private async handleSubscriptionUpdated(event: Stripe.Event, subscription: Stripe.Subscription): Promise<void> {
     const userId = subscription.metadata?.userId;
     if (!userId) {
       console.error('No userId in subscription metadata');
-      return;
-    }
-
-    const existingSubscription = db.getSubscriptionByUserId(userId);
-    if (!existingSubscription) {
-      console.error(`No subscription found for user ${userId}`);
       return;
     }
 
     const status = subscriptionStatus(subscription.status);
-    if (!status) {
-      console.log(`Ignoring ${subscription.status} subscription for user ${userId}`);
-      return;
-    }
-
-    db.updateSubscription(existingSubscription.id, {
+    const customerId = typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer.id;
+    db.applyBillingEvent({
+      provider: 'stripe',
+      eventId: event.id,
+      eventType: event.type,
+      occurredAt: event.created * 1000,
+      userId,
+      externalKey: subscription.id,
+      kind: 'subscription',
       status,
-      current_period_start: subscription.current_period_start * 1000,
-      current_period_end: subscription.current_period_end * 1000,
+      customerId,
+      currentPeriodStart: subscription.current_period_start * 1000,
+      currentPeriodEnd: subscription.current_period_end * 1000,
     });
 
-    console.log(`Subscription updated for user ${userId}: ${status}`);
+    console.log(`Subscription updated for user ${userId}: ${status ?? 'no entitlement change'}`);
   }
 
-  private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+  private async handleSubscriptionDeleted(event: Stripe.Event, subscription: Stripe.Subscription): Promise<void> {
     const userId = subscription.metadata?.userId;
     if (!userId) {
       console.error('No userId in subscription metadata');
       return;
     }
 
-    const existingSubscription = db.getSubscriptionByUserId(userId);
-    if (!existingSubscription) {
-      console.error(`No subscription found for user ${userId}`);
-      return;
-    }
-
-    // Never revoke a lifetime unlock: it has no stripe subscription attached,
-    // so a cancellation event for some other subscription must not touch it.
-    if (!existingSubscription.stripe_subscription_id) {
-      console.log(`Ignoring cancellation for user ${userId}: lifetime unlock`);
-      return;
-    }
-
-    db.updateSubscription(existingSubscription.id, {
+    const customerId = typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer.id;
+    db.applyBillingEvent({
+      provider: 'stripe',
+      eventId: event.id,
+      eventType: event.type,
+      occurredAt: event.created * 1000,
+      userId,
+      externalKey: subscription.id,
+      kind: 'subscription',
       status: 'expired',
-      plan: 'free',
+      customerId,
+      currentPeriodStart: subscription.current_period_start * 1000,
+      currentPeriodEnd: subscription.current_period_end * 1000,
     });
 
     console.log(`Subscription canceled for user ${userId}`);
+  }
+
+  private async handleLifetimeRefund(event: Stripe.Event, charge: Stripe.Charge): Promise<void> {
+    const paymentIntentId = typeof charge.payment_intent === 'string'
+      ? charge.payment_intent
+      : charge.payment_intent?.id;
+    if (!paymentIntentId) {
+      console.error('Refunded charge has no payment intent');
+      return;
+    }
+
+    const paymentIntent = await this.stripe.paymentIntents.retrieve(paymentIntentId);
+    const userId = paymentIntent.metadata?.userId;
+    if (!userId) {
+      console.error('Refunded lifetime payment has no userId metadata');
+      return;
+    }
+
+    const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id;
+    db.applyBillingEvent({
+      provider: 'stripe',
+      eventId: event.id,
+      eventType: event.type,
+      occurredAt: event.created * 1000,
+      userId,
+      externalKey: paymentIntentId,
+      kind: 'lifetime',
+      status: 'refunded',
+      customerId,
+    });
+    console.log(`Lifetime purchase refunded for user ${userId}`);
   }
 }
 

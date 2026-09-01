@@ -28,13 +28,32 @@ router.post('/webhook', (req: Request, res: Response) => {
     }
 
     const change = entitlementFor(event.type || '');
-    if (!change) {
-      // Not a decision. CANCELLATION and BILLING_ISSUE land here on purpose.
-      console.log(`RevenueCat ${event.type} for ${userId}: no entitlement change`);
-      return res.status(200).json({ received: true });
+    const externalKey = event.original_transaction_id || event.transaction_id ||
+      (event.product_id ? `${userId}:${event.product_id}` : '');
+    const occurredAt = event.event_timestamp_ms || event.purchased_at_ms || Date.now();
+    const eventId = event.id || (externalKey ? `${event.type}:${externalKey}:${occurredAt}` : '');
+    if (!externalKey || !eventId) {
+      throw new Error('RevenueCat event is missing transaction identity');
     }
 
-    db.setMobileEntitlement(userId, change, event.expiration_at_ms ?? null);
+    db.applyBillingEvent({
+      provider: 'revenuecat',
+      eventId,
+      eventType: event.type || 'unknown',
+      occurredAt,
+      userId,
+      externalKey,
+      kind: event.type === 'NON_RENEWING_PURCHASE' ? 'lifetime' : 'subscription',
+      status: !change
+        ? null
+        : change === 'active'
+          ? 'active'
+          : event.type === 'REFUND'
+            ? 'refunded'
+            : 'expired',
+      currentPeriodStart: event.purchased_at_ms ?? null,
+      currentPeriodEnd: event.expiration_at_ms ?? null,
+    });
     console.log(`RevenueCat ${event.type} for ${userId}: ${change}`);
 
     res.status(200).json({ received: true });

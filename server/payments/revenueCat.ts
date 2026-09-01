@@ -3,7 +3,8 @@
  *
  * Apple and Google both require their own billing for digital goods, so Stripe
  * is web-only and mobile purchases arrive here instead. Both write the same
- * `subscriptions` row, and `isPremiumUser` stays source-agnostic.
+ * provider-specific entitlement, and premium access is the union of all
+ * providers rather than whichever webhook happened to arrive last.
  *
  * The mapping below is deliberately shaped like the Stripe one in
  * stripeService.ts, and for the same reason: collapsing every non-renewing
@@ -55,8 +56,13 @@ export const isAuthorized = (header: string | undefined, secret: string): boolea
 };
 
 export interface RevenueCatEvent {
+  id?: string;
   type?: string;
   app_user_id?: string;
+  product_id?: string;
+  transaction_id?: string;
+  original_transaction_id?: string;
+  purchased_at_ms?: number;
   expiration_at_ms?: number | null;
   event_timestamp_ms?: number;
 }

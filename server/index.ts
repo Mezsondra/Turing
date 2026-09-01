@@ -443,10 +443,10 @@ io.on('connection', async (socket: Socket) => {
               if (category === 'none') return;
               db.createReport({
                 id: uuidv4(),
-                // No human filed this one. Reports are never joined against
-                // users, and a literal keeps the row out of the cascade when a
-                // player deletes their account - evidence should outlive them.
-                reporter_id: 'system',
+                // Automated provenance is explicit. A fake `system` user would
+                // violate the reporter foreign key and silently lose the report.
+                reporter_id: null,
+                source: 'automated',
                 reported_id: senderId,
                 match_id: match.id,
                 reason: `auto:${category}`,

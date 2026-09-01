@@ -38,7 +38,8 @@ const AdminButton: React.FC<{ onClick: () => void; className: string; children: 
 
 interface Report {
   id: string;
-  reporter_id: string;
+  reporter_id: string | null;
+  source: 'human' | 'automated';
   reported_id: string;
   match_id: string;
   reason: string;
@@ -148,7 +149,7 @@ const ReportsCard: React.FC<{ authToken: string }> = ({ authToken }) => {
             </div>
 
             <p className="text-xs text-slate-500 font-mono break-all">
-              reported {report.reported_id} · by {report.reporter_id}
+              reported {report.reported_id} · by {report.source === 'automated' ? 'automated review' : report.reporter_id}
             </p>
 
             {report.transcript ? (

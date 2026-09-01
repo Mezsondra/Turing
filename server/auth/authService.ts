@@ -47,8 +47,9 @@ export interface AuthResponse {
 
 export class AuthService {
   async register(data: RegisterData): Promise<AuthResponse> {
+    const email = data.email.trim().toLowerCase();
     // Check if user already exists
-    const existingUser = db.getUserByEmail(data.email);
+    const existingUser = db.getUserByEmail(email);
     if (existingUser) {
       throw new Error('Email already registered');
     }
@@ -63,7 +64,7 @@ export class AuthService {
         ? (() => {
             const guest = db.getUserByDeviceId(data.deviceId!);
             return guest && !guest.email
-              ? db.attachAccountToGuest(guest.id, data.email, passwordHash, data.username)
+              ? db.attachAccountToGuest(guest.id, email, passwordHash, data.username)
               : undefined;
           })()
         : undefined;
@@ -71,22 +72,13 @@ export class AuthService {
     if (!user) {
       user = db.createUser({
         id: uuidv4(),
-        email: data.email,
+        email,
         password_hash: passwordHash,
         username: data.username,
       });
     }
 
-    const userId = user.id;
-
-    // Create free subscription
-    const subscriptionId = uuidv4();
-    const subscription = db.createSubscription({
-      id: subscriptionId,
-      user_id: userId,
-      status: 'active',
-      plan: 'free',
-    });
+    const subscription = db.getSubscriptionByUserId(user.id);
 
     // Generate JWT token
     const token = this.generateToken({ userId: user.id, email: user.email });
@@ -107,7 +99,7 @@ export class AuthService {
 
   async login(data: LoginData): Promise<AuthResponse> {
     // Find user
-    const user = db.getUserByEmail(data.email);
+    const user = db.getUserByEmail(data.email.trim().toLowerCase());
     if (!user) {
       throw new Error('Invalid email or password');
     }
@@ -126,9 +118,6 @@ export class AuthService {
 
     // Get subscription
     const subscription = db.getSubscriptionByUserId(user.id);
-    if (!subscription) {
-      throw new Error('Subscription not found');
-    }
 
     // Generate JWT token
     const token = this.generateToken({ userId: user.id, email: user.email });
@@ -153,15 +142,7 @@ export class AuthService {
    * they hand back or forget to create.
    */
   private issueSession(user: User): AuthResponse {
-    let subscription = db.getSubscriptionByUserId(user.id);
-    if (!subscription) {
-      subscription = db.createSubscription({
-        id: uuidv4(),
-        user_id: user.id,
-        status: 'active',
-        plan: 'free',
-      });
-    }
+    const subscription = db.getSubscriptionByUserId(user.id);
 
     return {
       user: { id: user.id, email: user.email!, username: user.username },
@@ -178,6 +159,7 @@ export class AuthService {
    * Passwordless by design: password_hash stays null, and login() refuses it.
    */
   private findOrCreateByEmail(email: string, deviceId?: string, username?: string): User {
+    email = email.trim().toLowerCase();
     const existing = db.getUserByEmail(email);
     if (existing) return existing;
 
@@ -255,8 +237,7 @@ export class AuthService {
   }
 
   isPremiumUser(userId: string): boolean {
-    const subscription = db.getSubscriptionByUserId(userId);
-    return subscription?.plan === 'premium' && subscription?.status === 'active';
+    return db.isPremiumUser(userId);
   }
 }
 

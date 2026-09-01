@@ -54,13 +54,18 @@ export class MatchmakingService {
       return;
     }
 
+    // Resolve all blocks once. Querying SQLite for every candidate made this
+    // loop increasingly expensive as the queue grew and blocked the Node event
+    // loop because better-sqlite3 is synchronous.
+    const blockedPlayers = user.playerId ? db.getBlockedPlayerIds(user.playerId) : new Set<string>();
+
     // Try to find another waiting user with same language
     const otherUserIndex = this.waitingQueue.findIndex(
       u =>
         u.id !== user.id &&
         u.language === user.language &&
         // Never re-pair players who blocked each other.
-        !(u.playerId && user.playerId && db.areBlocked(user.playerId, u.playerId))
+        !(u.playerId && blockedPlayers.has(u.playerId))
     );
 
     if (otherUserIndex !== -1) {

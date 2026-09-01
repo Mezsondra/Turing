@@ -34,10 +34,9 @@ Locally: `npm run build && npm start`, then http://localhost:3001. Admin is at
   bakes `VITE_SERVER_URL` into `dist/` - which the server must not have, since
   it serves the frontend from its own origin - and then runs `cap sync`, which
   wants the native projects. It is a command for your Mac.
-- Schema changes
-  apply themselves on boot from `runMigrations` in `server/database/db.ts`, so
-  there is never a separate migration step - but read `pm2 logs turing` after a
-  restart, because a migration that throws is caught and ignored by design.
+- Schema changes apply themselves on boot through numbered, checksummed,
+  transactional migrations. A failed migration aborts startup and rolls back;
+  always read `pm2 logs turing` and run the database checks after a deploy.
 - Env comes from
   `.env.local` via `--env-file`, which node reads at startup, so any restart
   picks up an edit; pm2's `--update-env` is unrelated and not needed.
@@ -135,7 +134,8 @@ live account, recreate from scratch:
 - The three products/prices — new `price_...` ids.
 - The webhook endpoint at `https://turing-test.app/api/payment/webhook`, with
   exactly `checkout.session.completed`, `customer.subscription.created`,
-  `customer.subscription.updated`, `customer.subscription.deleted` — new
+  `customer.subscription.updated`, `customer.subscription.deleted`, and
+  `charge.refunded` — new
   `whsec_...`.
 - The Customer Portal config (Settings → Billing). Keep **cancel at end of
   billing period**: the customer paid for the period, and the code deliberately

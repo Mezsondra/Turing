@@ -7,7 +7,9 @@ After=network.target
 [Service]
 Type=simple
 User=turing
-WorkingDirectory=/srv/turing
+WorkingDirectory=/sdc/turing
+Environment=NODE_ENV=production
+Environment=DATABASE_PATH=/sdc/turing/turing.db
 ExecStart=/usr/bin/env npm start
 Restart=always
 RestartSec=5

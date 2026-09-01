@@ -162,11 +162,18 @@ Then use the files in [deploy/](deploy/):
 
 - `turing.service` - systemd unit (auto-restart, starts on boot)
 - `Caddyfile` - TLS + WebSocket reverse proxy, certificates handled automatically
-- `backup.sh` - nightly SQLite backup for cron
+- `backup.sh` - nightly integrity-checked SQLite backup for cron (30-day local retention)
 
-Make sure the service user owns the whole directory (`chown -R turing:turing
-/srv/turing`) - SQLite creates `turing.db-wal` and `turing.db-shm` alongside the
+Set `DATABASE_PATH=/sdc/turing/turing.db` in production and make sure the service
+user owns the whole directory (`chown -R turing:turing /sdc/turing`) - SQLite
+creates `turing.db-wal` and `turing.db-shm` alongside the
 database, so it needs write permission on the folder, not just the file.
+
+The backup job defaults to `/var/backups/turing`. It validates every backup
+before publishing it, but the selected deployment keeps backups on the same
+host; losing the host can therefore still lose both the database and backups.
+For the versioned schema preflight, migration, verification, and rollback
+commands, follow [deploy/DATABASE_ROLLOUT.md](deploy/DATABASE_ROLLOUT.md).
 
 **Scaling ceiling:** matches live in memory and the database is a local file, so
 this runs as exactly one instance. That is fine well past launch; move matches to
