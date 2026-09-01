@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import AdSenseAd from './AdSenseAd';
 import { useTranslations } from '../hooks/useTranslations';
 import { isNative, showInterstitial } from '../lib/ads';
+import useAnimatedDismiss from '../hooks/useAnimatedDismiss';
 
 interface AdModalProps {
   onClose: () => void;
@@ -15,6 +16,7 @@ interface AdModalProps {
 const hasAdNetwork = Boolean(import.meta.env.VITE_ADSENSE_CLIENT_ID);
 
 const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, onUpgrade }) => {
+  const { isClosing, dismiss } = useAnimatedDismiss(onClose);
   // Nothing to wait for when there is no ad to watch.
   const [countdown, setCountdown] = useState(hasAdNetwork ? 10 : 0);
   const { t } = useTranslations();
@@ -44,8 +46,8 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
   if (isNative()) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative">
+    <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" data-closing={isClosing}>
+      <div className="modal-panel bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-slate-200 text-center mb-2">
             {hasAdNetwork ? t('ad_break_title') : t('support_us_title')}
@@ -75,7 +77,7 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
         <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
           {showUpgradeButton && onUpgrade && (
             <button
-              onClick={onUpgrade}
+              onClick={() => dismiss(onUpgrade)}
               className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-full transition-all transform hover:scale-105 shadow-lg"
             >
               ⭐ {t('upgrade_to_premium') || 'Upgrade to Premium'}
@@ -83,7 +85,7 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
           )}
 
           <button
-            onClick={onClose}
+            onClick={() => dismiss()}
             disabled={countdown > 0}
             className={`${
               countdown > 0

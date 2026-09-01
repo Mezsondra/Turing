@@ -4,12 +4,14 @@ import { useTranslations } from '../hooks/useTranslations';
 import { useAuth } from '../context/AuthContext';
 import { API_URL } from '../lib/api';
 import ToggleSwitch from './ToggleSwitch';
+import useAnimatedDismiss from '../hooks/useAnimatedDismiss';
 
 interface SettingsModalProps {
   onClose: () => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
+  const { isClosing, dismiss } = useAnimatedDismiss(onClose);
   const { 
     language, setLanguage, 
     isSoundEnabled, setIsSoundEnabled, 
@@ -43,20 +45,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-      onClick={onClose}
+    <div
+      className="modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50"
+      data-closing={isClosing}
+      onClick={() => dismiss()}
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
     >
-      <div 
-        className="bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-700"
+      <div
+        className="modal-panel bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-700"
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
       >
         <div className="flex justify-between items-center mb-6">
           <h2 id="settings-title" className="text-2xl font-bold text-cyan-400">{t('settings_title')}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label={t('close')}>
+          <button onClick={() => dismiss()} className="text-slate-400 hover:text-white" aria-label={t('close')}>
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
             </svg>

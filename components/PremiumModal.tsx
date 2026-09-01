@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslations } from '../hooks/useTranslations';
 import LoadingSpinner from './LoadingSpinner';
+import useAnimatedDismiss from '../hooks/useAnimatedDismiss';
 import { isNative, showRewarded } from '../lib/ads';
 import { canPurchaseNatively, purchase, restore } from '../lib/purchases';
 import { socketService } from '../services/socketService';
@@ -24,6 +25,7 @@ const Check = () => (
 );
 
 const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerId }) => {
+  const { isClosing, dismiss } = useAnimatedDismiss(onClose);
   const [isLoading, setIsLoading] = useState(false);
   const [watching, setWatching] = useState(false);
   const [plan, setPlan] = useState<PremiumPlan>('yearly');
@@ -106,10 +108,10 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-slate-800 rounded-lg max-w-md w-full p-6 relative my-8">
+    <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 overflow-y-auto" data-closing={isClosing}>
+      <div className="modal-panel bg-slate-800 rounded-lg max-w-md w-full p-6 relative my-8">
         <button
-          onClick={onClose}
+          onClick={() => dismiss()}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"
           aria-label={t('close')}
         >

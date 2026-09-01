@@ -18,14 +18,14 @@ const GuessScreen: React.FC<GuessScreenProps> = ({ onGuess, onExit }) => {
         <div className="flex flex-col sm:flex-row gap-4">
           <button
             onClick={() => onGuess('HUMAN')}
-            className="w-full sm:w-48 bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-lg text-2xl transition-transform transform hover:scale-105"
+            className="guess-button w-full sm:w-48 bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-lg text-2xl"
           >
             <span role="img" aria-label="human" className="mr-2">👤</span>
             {t('human')}
           </button>
           <button
             onClick={() => onGuess('AI')}
-            className="w-full sm:w-48 bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-lg text-2xl transition-transform transform hover:scale-105"
+            className="guess-button w-full sm:w-48 bg-slate-700 hover:bg-slate-600 text-white font-bold py-4 px-6 rounded-lg text-2xl"
           >
             <span role="img" aria-label="ai" className="mr-2">🤖</span>
             {t('ai')}

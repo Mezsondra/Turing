@@ -109,7 +109,7 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
       </header>
 
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className="m-auto w-full max-w-md px-5 py-6 text-center sm:py-10">
+        <div className="result-reveal m-auto w-full max-w-md px-5 py-6 text-center sm:py-10">
           <h2
             className={`text-4xl font-black tracking-tight sm:text-5xl ${
               wasCorrect ? 'text-green-400' : 'text-red-400'

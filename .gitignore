@@ -29,3 +29,10 @@ admin-config.json
 turing.db
 turing.db-*
 dist
+.claude/skills/find-animation-opportunities/SKILL.md
+.agents/skills/find-animation-opportunities/SKILL.md
+.agents/skills/emil-design-eng/SKILL.md
+.claude/skills/emil-design-eng/SKILL.md
+skills-lock.json
+skills/find-animation-opportunities/SKILL.md
+.gitignore

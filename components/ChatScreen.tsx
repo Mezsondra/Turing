@@ -173,13 +173,29 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
 
   // Show loading/searching state
   if (connectionStatus === 'connecting' || connectionStatus === 'searching') {
+    const statusText = connectionStatus === 'connecting'
+      ? t('connecting') || 'Connecting...'
+      : t('searching_partner') || 'Searching for a partner...';
+
     return (
       <div className="relative flex flex-col items-center justify-center h-screen bg-slate-900 p-4 text-center">
         <ExitToMenu onExit={onExit} className="absolute top-5 left-5" />
         <LoadingSpinner />
-        <p className="text-xl text-slate-300 mt-4">
-          {connectionStatus === 'connecting' ? t('connecting') || 'Connecting...' : t('searching_partner') || 'Searching for a partner...'}
-        </p>
+        <span className="sr-only" aria-live="polite">{statusText}</span>
+        <div className="relative mt-4 h-7 w-full max-w-sm" aria-hidden="true">
+          <p
+            className="matchmaking-status text-xl text-slate-300"
+            data-state={connectionStatus === 'connecting' ? 'current' : 'left'}
+          >
+            {t('connecting') || 'Connecting...'}
+          </p>
+          <p
+            className="matchmaking-status text-xl text-slate-300"
+            data-state={connectionStatus === 'searching' ? 'current' : undefined}
+          >
+            {t('searching_partner') || 'Searching for a partner...'}
+          </p>
+        </div>
       </div>
     );
   }
@@ -230,7 +246,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
 
       <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
         {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={index} className={`message-enter flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-br-lg' : 'bg-slate-700 text-slate-200 rounded-bl-lg'}`}>
               <p className="whitespace-pre-wrap">{msg.text}</p>
             </div>

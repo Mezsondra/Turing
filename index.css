@@ -1,5 +1,97 @@
 @import "tailwindcss";
 
+:root {
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Shared transient-surface motion. The data attribute keeps the surface mounted
+   for its faster exit; @starting-style supplies the first painted frame. */
+.modal-backdrop {
+  opacity: 1;
+  transition: opacity 150ms var(--motion-ease-out);
+}
+
+.modal-panel {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 200ms var(--motion-ease-out), transform 200ms var(--motion-ease-drawer);
+  transform-origin: center;
+}
+
+.modal-backdrop[data-closing="true"] {
+  opacity: 0;
+  pointer-events: none;
+  transition-duration: 150ms;
+}
+
+.modal-backdrop[data-closing="true"] .modal-panel {
+  opacity: 0;
+  transform: scale(0.97);
+  transition-duration: 150ms;
+}
+
+.result-reveal {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 260ms var(--motion-ease-out), transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.report-state {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 180ms var(--motion-ease-out), transform 180ms var(--motion-ease-out);
+}
+
+.report-state[data-leaving="true"] {
+  opacity: 0;
+  transform: translate3d(0, -4px, 0);
+  pointer-events: none;
+  transition: opacity 120ms linear, transform 120ms linear;
+}
+
+.message-enter {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition: opacity 120ms var(--motion-ease-out), transform 120ms var(--motion-ease-out);
+}
+
+.matchmaking-status {
+  position: absolute;
+  inset-inline: 0;
+  opacity: 0;
+  transform: translate3d(0, 4px, 0);
+  transition: opacity 180ms var(--motion-ease-out), transform 180ms var(--motion-ease-out);
+}
+
+.matchmaking-status[data-state="current"] {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.matchmaking-status[data-state="left"] {
+  transform: translate3d(0, -4px, 0);
+  transition: opacity 120ms linear, transform 120ms linear;
+}
+
+.guess-button {
+  transition: transform 100ms var(--motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .guess-button:hover { transform: scale(1.05); }
+}
+
+.guess-button:active { transform: scale(0.97); }
+
+@starting-style {
+  .modal-backdrop { opacity: 0; }
+  .modal-panel { opacity: 0; transform: scale(0.97); }
+  .result-reveal,
+  .report-confirmation,
+  .message-enter { opacity: 0; transform: translate3d(0, 10px, 0); }
+}
+
 /* ---------------------------------------------------------------------------
    Onboarding slide motion.
 
@@ -62,4 +154,26 @@
   /* No cross-fade to watch, so the outgoing slide must not linger on top. */
   [data-slide-state="leaving"] { display: none !important; }
   [data-progress-fill] { transition: none !important; }
+
+  .modal-backdrop,
+  .modal-panel,
+  .result-reveal,
+  .report-state,
+  .message-enter,
+  .matchmaking-status {
+    transform: none !important;
+    transition: opacity 120ms linear !important;
+  }
+
+  .guess-button:active { transform: scale(0.99); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    .modal-backdrop,
+    .modal-panel,
+    .result-reveal,
+    .report-confirmation,
+    .message-enter { opacity: 0; transform: none; }
+  }
 }

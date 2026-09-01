@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTranslations } from '../hooks/useTranslations';
 import { API_URL } from '../lib/api';
 import LoadingSpinner from './LoadingSpinner';
+import useAnimatedDismiss from '../hooks/useAnimatedDismiss';
 
 interface AuthModalProps {
   onClose: () => void;
@@ -26,6 +27,7 @@ const loadGoogleScript = (): Promise<void> =>
   });
 
 const AuthModal: React.FC<AuthModalProps> = ({ onClose, reason }) => {
+  const { isClosing, dismiss } = useAnimatedDismiss(onClose);
   const { requestEmailCode, signInWithCode, signInWithGoogle } = useAuth();
   const { t } = useTranslations();
 
@@ -121,10 +123,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, reason }) => {
     'w-full bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 text-slate-950 font-extrabold uppercase tracking-wider py-3 rounded-xl flex items-center justify-center transition-colors';
 
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
+    <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" data-closing={isClosing}>
+      <div className="modal-panel bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
         <button
-          onClick={onClose}
+          onClick={() => dismiss()}
           className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"
           aria-label={t('close')}
         >
