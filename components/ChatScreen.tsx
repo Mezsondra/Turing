@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { Message } from '../types';
 import Timer from './Timer';
 import LoadingSpinner from './LoadingSpinner';
@@ -26,12 +26,23 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
   const [isReporting, setIsReporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const onTimeUpRef = useRef(onTimeUp);
   useEffect(() => { onTimeUpRef.current = onTimeUp; }, [onTimeUp]);
   const { language, isSoundEnabled, isVibrationEnabled } = useSettings();
   const { t } = useTranslations();
+
+  const scrollToLatestMessage = useCallback((behavior: ScrollBehavior = 'auto') => {
+    const messagesElement = messagesRef.current;
+    if (!messagesElement) return;
+
+    messagesElement.scrollTo({
+      top: messagesElement.scrollHeight,
+      behavior,
+    });
+  }, []);
 
   // Read through refs so changing a setting mid-match does not tear down the
   // socket and throw the player back into the queue.
@@ -130,8 +141,36 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
   }, [language]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isPartnerTyping]);
+    // Wait for the new bubble/typing indicator to be laid out before measuring
+    // the scroll height. Scrolling the chat element directly avoids moving the
+    // entire WebView, which is unreliable while the mobile keyboard is open.
+    const frame = requestAnimationFrame(() => scrollToLatestMessage('smooth'));
+    return () => cancelAnimationFrame(frame);
+  }, [messages, isPartnerTyping, scrollToLatestMessage]);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    // Mobile keyboards resize the visual viewport after the input receives
+    // focus. Keep correcting the chat scroll during that resize so the newest
+    // message finishes immediately above the composer instead of behind it.
+    const handleViewportChange = () => {
+      if (document.activeElement !== inputRef.current) return;
+      requestAnimationFrame(() => scrollToLatestMessage());
+    };
+
+    viewport.addEventListener('resize', handleViewportChange);
+    viewport.addEventListener('scroll', handleViewportChange);
+    return () => {
+      viewport.removeEventListener('resize', handleViewportChange);
+      viewport.removeEventListener('scroll', handleViewportChange);
+    };
+  }, [scrollToLatestMessage]);
+
+  const handleInputFocus = () => {
+    requestAnimationFrame(() => scrollToLatestMessage());
+  };
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,7 +266,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-800">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-slate-800">
       <header className="bg-slate-900/70 backdrop-blur-sm p-4 flex justify-between items-center border-b border-slate-700 sticky top-0">
         <div className="flex items-center gap-4">
           <ExitToMenu onExit={onExit} confirm />
@@ -244,7 +283,7 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+      <main ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 space-y-4">
         {messages.map((msg, index) => (
           <div key={index} className={`message-enter flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-xs md:max-w-md lg:max-w-2xl px-4 py-2 rounded-2xl ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-br-lg' : 'bg-slate-700 text-slate-200 rounded-bl-lg'}`}>
@@ -261,7 +300,6 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </main>
 
       {notice && (
@@ -273,9 +311,11 @@ const ChatScreen: React.FC<ChatScreenProps> = ({ onTimeUp, score, onExit }) => {
       <footer className="bg-slate-900 p-4 sticky bottom-0 border-t border-slate-700">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={handleInputChange}
+            onFocus={handleInputFocus}
             placeholder={t('type_your_message')}
             className="flex-1 bg-slate-700 border border-slate-600 rounded-full py-2 px-4 text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
             disabled={connectionStatus !== 'matched'}
