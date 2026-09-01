@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tg" x1="150" y1="210" x2="874" y2="814" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <!-- Two interlocked speech bubbles: a conversation where you can't tell
+       which speaker is which. Solid = one, outline = the other. -->
+  <g transform="translate(0 -12)">
+    <path transform="translate(150 210)"
+      d="M104,0 H336 A104,104 0 0 1 440,104 V276 A104,104 0 0 1 336,380 H210 L70,470 L120,380 H104 A104,104 0 0 1 0,276 V104 A104,104 0 0 1 104,0 Z"
+      fill="url(#tg)"/>
+    <path transform="rotate(180 512 512) translate(150 210)"
+      d="M104,0 H336 A104,104 0 0 1 440,104 V276 A104,104 0 0 1 336,380 H210 L70,470 L120,380 H104 A104,104 0 0 1 0,276 V104 A104,104 0 0 1 104,0 Z"
+      fill="#0f172a" stroke="#7dd3fc" stroke-width="22" stroke-linejoin="round"/>
+  </g>
+</svg>

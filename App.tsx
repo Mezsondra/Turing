@@ -4,6 +4,7 @@ import ChatScreen from './components/ChatScreen';
 import GuessScreen from './components/GuessScreen';
 import ResultScreen from './components/ResultScreen';
 import AdminPage from './components/AdminPage';
+import LoadingSpinner from './components/LoadingSpinner';
 import AdModal from './components/AdModal';
 import PremiumModal, { PremiumPlan } from './components/PremiumModal';
 import AuthModal from './components/AuthModal';
@@ -20,6 +21,7 @@ const App: React.FC = () => {
   const [modal, setModal] = useState<'none' | 'ad' | 'premium' | 'auth'>('none');
   const [pendingAd, setPendingAd] = useState(false);
   const [roundsLeft, setRoundsLeft] = useState<number | null>(null);
+  const [hasLoadedStats, setHasLoadedStats] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(hasConfirmedAge);
   const [onboarded, setOnboarded] = useState(hasOnboarded);
 
@@ -61,6 +63,7 @@ const App: React.FC = () => {
     const unsubscribeStats = socketService.onStats((stats) => {
       setScoreData(stats);
       setRoundsLeft(stats.roundsLeft);
+      setHasLoadedStats(true);
     });
 
     // Out of free rounds. Guests are sent to sign up - which is worth more
@@ -229,6 +232,20 @@ const App: React.FC = () => {
   // with a stranger.
   if (!onboarded) {
     return <Onboarding onDone={() => setOnboarded(true)} />;
+  }
+
+  // The zeroed score data above is only a placeholder. Rendering it makes a
+  // returning player look like a first-time player until the server responds.
+  if (isAuthLoading || !hasLoadedStats) {
+    return (
+      <div
+        className="grid min-h-[100dvh] place-items-center bg-slate-900 text-slate-400"
+        role="status"
+        aria-label={t('connecting')}
+      >
+        <LoadingSpinner />
+      </div>
+    );
   }
 
   return (
