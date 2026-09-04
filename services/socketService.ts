@@ -67,12 +67,6 @@ export class SocketService {
 
     this.connecting = new Promise((resolve, reject) => {
       this.socket = io(this.serverUrl, {
-        // Websocket first because the handshake is exempt from CORS, while
-        // polling is not. Once a server carrying https://localhost in
-        // ALLOWED_ORIGINS is deployed, delete this line: socket.io's default
-        // (polling, then upgrade) survives networks that block the websocket
-        // handshake, which this order does not.
-        transports: ['websocket', 'polling'],
         // A signed-in player is identified by their token; guests by device id.
         auth: { deviceId: getDeviceId(), token: localStorage.getItem('auth_token') || undefined },
       });
