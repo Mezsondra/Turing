@@ -131,5 +131,6 @@
   "restore_purchases": "Restore purchases",
   "purchase_restored": "Your purchase has been restored.",
   "nothing_to_restore": "No previous purchase found for this account.",
-  "purchase_processing": "Purchase received. It may take a moment to unlock."
+  "purchase_processing": "Purchase received. It may take a moment to unlock.",
+  "guess_failed": "Connection lost, so this round could not be scored. Back to the menu."
 }

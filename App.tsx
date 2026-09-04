@@ -88,7 +88,12 @@ const App: React.FC = () => {
 
     const unsubscribeGuess = socketService.onGuessResult((result) => {
       if (result.error) {
+        // The round is gone server-side (a dropped socket destroys the match),
+        // so there is nothing to retry - say so instead of freezing on a
+        // guess screen whose buttons now do nothing.
         console.error('Error submitting guess:', result.error);
+        alert(tRef.current('guess_failed'));
+        setGameState(GameState.WELCOME);
         return;
       }
 
@@ -135,10 +140,21 @@ const App: React.FC = () => {
   };
 
   const handleGuess = (guess: 'HUMAN' | 'AI') => {
+    // socket.io buffers an emit on a disconnected socket rather than throwing,
+    // so without this check a tap on a dead connection is indistinguishable
+    // from a tap that did nothing.
+    if (!socketService.isConnected()) {
+      alert(t('guess_failed'));
+      setGameState(GameState.WELCOME);
+      return;
+    }
+
     try {
       socketService.submitGuess(matchId, guess);
     } catch (error) {
       console.error('Failed to submit guess:', error);
+      alert(t('guess_failed'));
+      setGameState(GameState.WELCOME);
     }
   };
 

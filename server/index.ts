@@ -84,7 +84,8 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // The native builds serve their bundled assets from these origins, so a mobile
 // app is cross-origin to the API even though the web build is not. Without
 // them the app connects to nothing and every screen reports a failure.
-const ALLOWED_ORIGINS = [CLIENT_URL, 'capacitor://localhost', 'http://localhost'];
+// Android Capacitor serves from https://localhost, iOS from capacitor://localhost.
+const ALLOWED_ORIGINS = [CLIENT_URL, 'capacitor://localhost', 'https://localhost', 'http://localhost'];
 
 
 const app = express();
