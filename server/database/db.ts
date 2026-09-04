@@ -525,15 +525,19 @@ export class DatabaseService {
       .run(matchId, userId, ipHash, Date.now());
   }
 
-  getRoundStartCount(userId: string): number {
-    const row = this.statement('SELECT COUNT(*) as count FROM round_starts WHERE user_id = ?')
-      .get(userId) as { count: number };
+  // `since` is the start of the allowance window. It defaults to 0 - every
+  // round ever - so a caller that forgets it is stricter, not looser.
+  getRoundStartCount(userId: string, since = 0): number {
+    const row = this.statement(
+      'SELECT COUNT(*) as count FROM round_starts WHERE user_id = ? AND started_at >= ?'
+    ).get(userId, since) as { count: number };
     return row.count;
   }
 
-  getRoundStartCountByIp(ipHash: string): number {
-    const row = this.statement('SELECT COUNT(*) as count FROM round_starts WHERE ip_hash = ?')
-      .get(ipHash) as { count: number };
+  getRoundStartCountByIp(ipHash: string, since = 0): number {
+    const row = this.statement(
+      'SELECT COUNT(*) as count FROM round_starts WHERE ip_hash = ? AND started_at >= ?'
+    ).get(ipHash, since) as { count: number };
     return row.count;
   }
 
@@ -593,9 +597,12 @@ export class DatabaseService {
     return result.changes > 0;
   }
 
-  getBonusRounds(playerId: string): number {
-    const row = this.statement('SELECT COALESCE(SUM(rounds), 0) AS total FROM reward_grants WHERE player_id = ?')
-      .get(playerId) as { total: number };
+  // Windowed like the cap it lifts. Summing every grant ever would turn one
+  // watched ad into a permanent raise once the base allowance became daily.
+  getBonusRounds(playerId: string, since = 0): number {
+    const row = this.statement(
+      'SELECT COALESCE(SUM(rounds), 0) AS total FROM reward_grants WHERE player_id = ? AND created_at >= ?'
+    ).get(playerId, since) as { total: number };
     return row.total;
   }
 

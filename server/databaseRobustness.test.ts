@@ -50,6 +50,17 @@ try {
   db.close();
   db = new DatabaseService(freshPath);
   assert.strictEqual(db.getRoundStartCount(user.id), 1, 'restart must not duplicate a billed round');
+
+  // The free-round allowance is a rolling window, so every total it is built
+  // from has to honour `since`. A window opening in the future must see none
+  // of them - miss the clause on any one and the daily cap silently becomes a
+  // lifetime one again.
+  const future = Date.now() + 60_000;
+  db.grantRewardRounds('reward-one', user.id, 3);
+  assert.strictEqual(db.getBonusRounds(user.id), 3);
+  assert.strictEqual(db.getRoundStartCount(user.id, future), 0, 'player rounds are windowed');
+  assert.strictEqual(db.getRoundStartCountByIp('ip-one', future), 0, 'ip rounds are windowed');
+  assert.strictEqual(db.getBonusRounds(user.id, future), 0, 'ad rewards are windowed');
   db.close();
 
   let raw = new Database(freshPath, { readonly: true });

@@ -347,13 +347,15 @@ const AdminPage: React.FC = () => {
 
             <AdminCard title="Free Rounds">
               <p className="text-sm text-slate-400 -mt-2">
-                Lifetime allowances, not per day. A player who runs out is sent to sign up
-                (guests) or to the paywall (members). Premium is always unlimited.
+                How much free play, and how often it comes back. A player who runs out is
+                sent to sign up (guests) or to the paywall (members). Premium is always
+                unlimited.
               </p>
               {([
                 ['guest', 'Guest', 'Anonymous players, identified only by a browser-held device id.'],
                 ['member', 'Signed-in member', 'Accounts without a subscription. Should exceed the guest cap, or signing up buys nothing.'],
                 ['guestPerIp', 'Guest cap per IP', 'Backstop so clearing site data does not hand out a fresh allowance. Set well above the guest cap - offices and households share one address.'],
+                ['windowHours', 'Reset window (hours)', 'How long an allowance lasts. 24 gives everyone the caps above once a day. Set 0 to never reset, making them lifetime totals. It is a sliding window, so rounds return one at a time rather than all at midnight.'],
               ] as const).map(([key, label, help]) => (
                 <LabeledInput key={key} label={label} description={help}>
                   <input

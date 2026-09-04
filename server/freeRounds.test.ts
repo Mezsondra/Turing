@@ -1,6 +1,6 @@
 // Run: npx tsx server/freeRounds.test.ts
 import assert from 'assert';
-import { roundsLeft, type FreeRoundCaps } from './freeRounds.js';
+import { roundsLeft, windowStart, type FreeRoundCaps } from './freeRounds.js';
 
 const caps: FreeRoundCaps = { guest: 5, member: 10, guestPerIp: 20 };
 const base = {
@@ -85,6 +85,28 @@ try {
     0,
     'a zero cap must close the door, not open it',
   );
+
+  // --- The allowance window, which the admin panel sets in hours. ---
+  const now = 1_000_000_000_000;
+  const hour = 60 * 60 * 1000;
+
+  assert.strictEqual(windowStart(24, now), now - 24 * hour, 'a day is a day');
+  assert.strictEqual(windowStart(1, now), now - hour);
+
+  // 0 is the lifetime cap this shipped with, and the only value that means
+  // "no window" - every other unusable input falls back to the default.
+  assert.strictEqual(windowStart(0, now), 0, '0 hours never resets');
+  for (const bad of [undefined, null, '', 'abc', NaN, -5, Infinity]) {
+    assert.strictEqual(
+      windowStart(bad, now),
+      now - 24 * hour,
+      `a bad window (${String(bad)}) must fall back, never open up`,
+    );
+  }
+
+  // The clock is not trusted to be past the epoch; a window wider than `now`
+  // must not produce a negative timestamp that sorts oddly against started_at.
+  assert.strictEqual(windowStart(100, hour), 0, 'window wider than the clock clamps to 0');
 
   console.log('freeRounds tests passed');
 } catch (error) {

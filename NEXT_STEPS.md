@@ -1,6 +1,6 @@
 # Status & Next Steps
 
-Last updated: 2026-08-29
+Last updated: 2026-09-04
 
 ## Where the project is
 
@@ -64,10 +64,20 @@ application logic.
 partner you were a bot earns a deception bonus.
 
 **Monetization.** $2.99/mo, $19.99/yr, $50 lifetime via Stripe (subscription
-and one-off modes). Free players get 10 rounds/day and an interstitial every 3
-rounds — both decided server-side so a client cannot opt out. With no ad
-network configured the interstitial sells Premium instead of showing an empty
-frame.
+and one-off modes). Free players get 10 rounds a day, 5 as a guest, and an
+interstitial every 3 rounds - both decided server-side so a client cannot opt
+out. All four numbers - the three caps and the window - are editable in
+`/admin` under **Free Rounds**.
+
+The allowance is a **sliding window**, not a calendar day: no timezone to
+choose and no midnight job, at the cost of rounds returning one at a time.
+`windowHours` sets it; **0 means it never resets**, which is the lifetime cap
+this shipped with. `getFreeRoundsSince()` resolves it once per check and every
+total it feeds - rounds by player, rounds by IP, and ad-reward bonuses - takes
+the same `since`. Miss it on one and the cap quietly goes back to being for
+life; the bonus one matters most, since an un-windowed ad grant would raise the
+daily cap permanently. With no ad network configured the interstitial sells
+Premium instead of showing an empty frame.
 
 All three plans were bought and cancelled end to end in the Stripe sandbox.
 Three bugs surfaced doing it, all fixed:
@@ -232,11 +242,11 @@ account, not the app. Before submission, replace:
 - `com.google.android.gms.ads.APPLICATION_ID` in
   `android/app/src/main/AndroidManifest.xml` - **done**.
 
-**iOS is fully configured. Android still serves test ads** - its interstitial
-and rewarded units have not been created (only a banner unit, which this code
-does not use), so `VITE_ADMOB_*_ANDROID` are unset and fall back to Google's
-test units. The Android build therefore earns nothing until those two units
-exist and the ids are added.
+**Both platforms are configured.** Interstitial and rewarded units exist for
+iOS and Android, and all four ids are set in `.env.local`. The fallback to
+Google's test units no longer fires here - but it still fires silently on any
+other machine, so a build made without that file earns nothing and says
+nothing.
 
 Unit ids live in `.env.local` on the build machine and are deliberately **not
 committed**: this repo is public, and a published unit id can be served from
@@ -249,45 +259,60 @@ ship rather than blanks.
 
 **Still to do before either store:**
 
-- **In-app purchases are built (RevenueCat) but not yet configured.** Code is
-  done; the consoles are not. Both stores require their own billing for digital
-  goods - this is a Play rule as well as an Apple one, so Stripe is unusable in
-  both apps, not just on iOS.
+- **In-app purchases are built (RevenueCat); the consoles are half done.** Both
+  stores require their own billing for digital goods - a Play rule as well as an
+  Apple one, so Stripe is unusable in both apps, not just on iOS.
+
+  Done: the Play Console app and its subscription products.
 
   What is left, all of it console work:
 
-  1. App Store Connect: create the three products - monthly, yearly and a
-     **non-consumable** for lifetime. Play Console: two subscriptions and one
-     one-time product.
-  2. RevenueCat: connect both stores, create an entitlement, and attach the
-     products to packages typed `MONTHLY`, `ANNUAL` and `LIFETIME` - the client
-     looks them up by `packageType`, so a custom package identifier will simply
-     not be found.
-  3. `VITE_REVENUECAT_API_KEY_IOS` and `_ANDROID` in `.env.local`, then rebuild.
-     **Without a key the app falls back to Stripe checkout**, which is exactly
-     what gets a submission rejected - so an unset key is a silent failure with
-     an expensive symptom.
-  4. `REVENUECAT_WEBHOOK_SECRET` on the server, and the same value in
-     RevenueCat → Integrations → Webhooks alongside
-     `https://turing-test.app/api/revenuecat/webhook`. Unset, the endpoint
-     refuses everything - which is the safe direction, but it means purchases
-     succeed in the store and never unlock anything.
+  1. Play Console: confirm **lifetime** exists as a one-time (managed) product,
+     not only the two subscriptions.
+  2. Play Console → Setup → API access: a Google Cloud service account with
+     billing permission, its JSON key uploaded to RevenueCat. Without it
+     RevenueCat cannot verify a purchase or receive Real-time Developer
+     Notifications, and nothing ever reaches our webhook.
+  3. RevenueCat: add the Play app (`com.turingtest.app`), import the products,
+     create one entitlement, and put the products in the **default offering** as
+     packages typed `MONTHLY`, `ANNUAL` and `LIFETIME` - the built-in
+     `$rc_monthly` / `$rc_annual` / `$rc_lifetime` identifiers produce exactly
+     those types. `lib/purchases.ts` looks packages up by `packageType`, so a
+     custom identifier is not found and the plan reports as unavailable on the
+     device. The entitlement's *name* is never checked by the server -
+     `entitlementFor` keys off the event type - but `restore()` needs one to
+     exist.
+  4. `VITE_REVENUECAT_API_KEY_ANDROID` (the `goog_...` public SDK key) in
+     `.env.local`, then `npm run sync`. **Without a key the app falls back to
+     Stripe checkout**, which is exactly what gets a submission rejected - so an
+     unset key is a silent failure with an expensive symptom.
+  5. `REVENUECAT_WEBHOOK_SECRET` on the server, and the same value as the
+     **Authorization header** in RevenueCat → Integrations → Webhooks alongside
+     `https://turing-test.app/api/revenuecat/webhook`. `isAuthorized` compares
+     the whole header constant-time, so it must equal the secret exactly - no
+     `Bearer` prefix unless the secret itself carries one. Unset, the endpoint
+     refuses everything: purchases succeed in the store and unlock nothing.
+  6. Test from the **internal testing track** with a licence tester. Play
+     billing does not work in a sideloaded debug build, so this cannot be
+     verified on the `assembleDebug` APK. Then check RevenueCat's webhook log
+     and `sqlite3 turing.db "SELECT * FROM billing_entitlements WHERE
+     provider = 'revenuecat';"`.
+  7. Later, for iOS: the same three products in App Store Connect with lifetime
+     as a **non-consumable**, then `VITE_REVENUECAT_API_KEY_IOS`.
 
-  Entitlement stays source-agnostic: `isPremiumUser` still just checks
-  `plan='premium' AND status='active'`, and a mobile purchase writes the same
-  row with `source='revenuecat'`. `setMobileEntitlement` deliberately leaves the
-  `stripe_*` columns alone, since somebody can buy on the web and later on a
-  phone.
+  Entitlement stays source-agnostic: `isPremiumUser` checks
+  `billing_entitlements` for `status IN ('active','trialing')`, and a mobile
+  purchase writes its own row with `provider='revenuecat'` through the same
+  `applyBillingEvent` the Stripe webhook uses. Premium is the union of the
+  providers' rows, so somebody can buy on the web and later on a phone without
+  either revoking the other. `app_user_id` is the server-side `playerId`, which
+  is the same row a guest keeps when they register.
 
   `CANCELLATION` from RevenueCat means auto-renew was switched off, **not** that
   access ended - the customer keeps what they paid for until `EXPIRATION`.
   Treating it as a downgrade would be the c980386 bug arriving by a different
   door, and `revenueCat.test.ts` exists to keep it from happening.
 
-- **Known gap, pre-existing:** `isPremiumUser` accepts only `status='active'`,
-  so a row with `status='trialing'` gets no premium. Harmless today because no
-  trial is configured anywhere, but it becomes a live bug the moment one is -
-  in either Stripe or the stores.
 - Rewarded video is built, but **it grants nothing until you configure SSV**.
   In the AdMob console open the rewarded ad unit → Server-side verification and
   set the callback to `https://turing-test.app/api/ads/reward`. Without it the
@@ -296,7 +321,8 @@ ship rather than blanks.
   Set `VITE_ADMOB_REWARDED_ID` in the same pass and rebuild (`VITE_*` is
   compiled in). Verify with `sqlite3 turing.db "SELECT * FROM reward_grants;"`
   after watching one on a real device.
-- App icons, splash screens, store listings, screenshots.
+- Store listings and screenshots. Icons and splash screens are generated from
+  `resources/` by `npm run assets` - **done**.
 - A real device test. The simulator does not serve real ads.
 
 Still needed for submission: nothing legal - the privacy policy, terms and the
@@ -423,29 +449,29 @@ bot.
 
 ## Refunds and chargebacks
 
-Neither is automated, and neither is visible from inside the app. A refund in
-Stripe does **nothing** to the database, so a refunded buyer keeps premium
-until you revoke it by hand:
+A refunded **lifetime** purchase is handled: `charge.refunded` reaches
+`handleLifetimeRefund`, which reads the userId from the payment intent metadata
+and writes `status='refunded'`. Nothing else is.
+
+A refunded *subscription* invoice revokes nothing - the handler keys on the
+payment intent and files a lifetime row - and a chargeback
+(`charge.dispute.created`) is not handled at all. Both stay a manual fix, and a
+dispute only reaches you by Stripe's email, so do not filter those:
 
 ```bash
 sqlite3 /sdc/turing/turing.db \
-  "UPDATE subscriptions SET plan = 'free', status = 'expired',
+  "UPDATE billing_entitlements SET status = 'refunded',
    updated_at = CAST(strftime('%s','now') AS INTEGER) * 1000
    WHERE user_id = (SELECT id FROM users WHERE email = 'buyer@example.com');"
 ```
 
-Entitlement needs `plan='premium'` AND `status='active'`, so that ends it. For
-a subscription, cancel it in Stripe too or billing continues.
-
-A chargeback (`charge.dispute.created`) is the same manual fix, but you only
-learn about it from Stripe's email — do not filter those.
-
-Automating this is a `charge.refunded` handler, maybe a dozen lines. Not worth
-it while refunds are rare enough to remember individually; the first week two
-happen, write it.
+Entitlement needs `status IN ('active','trialing')`, so that ends it. For a
+subscription, cancel it in Stripe too or billing continues.
 
 ## Tests
 
-`npm test` runs nine suites covering matchmaking notification, scoring and
-streaks, guest→account migration, AI retry, moderation, blocks/reports/deletion,
-human typing timing, persona variety, and Stripe subscription status mapping.
+`npm test` runs fourteen suites covering matchmaking notification, scoring and
+streaks, guest→account migration, schema migrations and database robustness, AI
+retry, both moderation passes, blocks/reports/deletion, human typing timing,
+persona variety, Stripe status mapping, free rounds, login codes, rewarded-ad
+grants, and RevenueCat entitlement mapping.

@@ -1,9 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { windowStart } from './freeRounds.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/** The fallback for every free-round field, in one place. */
+const DEFAULT_FREE_ROUNDS = { guest: 5, member: 10, guestPerIp: 20, windowHours: 24 };
 
 export interface AIProviderSettings {
   apiKey: string;
@@ -20,8 +24,7 @@ export interface AdminConfiguration {
     xai: AIProviderSettings;
   };
 
-  // How many rounds a player gets before they have to pay. Lifetime totals,
-  // not per day: a cap that resets never forces a decision.
+  // How many rounds a player gets per window before they have to pay.
   freeRounds: {
     /** Anonymous players, identified only by a browser-held device id. */
     guest: number;
@@ -29,6 +32,11 @@ export interface AdminConfiguration {
     member: number;
     /** Backstop across one IP, so wiping localStorage does not fully reset. */
     guestPerIp: number;
+    /**
+     * How long an allowance lasts, as a sliding window in hours. 24 is a day;
+     * 0 never resets, which is the lifetime cap this app shipped with.
+     */
+    windowHours: number;
   };
 
   // Matchmaking Settings
@@ -78,7 +86,7 @@ export class AdminConfigService {
           apiBaseUrl: process.env.XAI_API_BASE_URL || 'https://api.x.ai/v1',
         },
       },
-      freeRounds: { guest: 5, member: 10, guestPerIp: 20 },
+      freeRounds: { guest: 5, member: 10, guestPerIp: 20, windowHours: 24 },
       aiMatchProbability: 0.5,
       matchTimeoutMs: 10000,
       conversationDurationSeconds: 60,
@@ -185,7 +193,7 @@ export class AdminConfigService {
    * form an admin edits by hand.
    */
   getFreeRounds(): { guest: number; member: number; guestPerIp: number } {
-    const f = this.config.freeRounds || { guest: 5, member: 10, guestPerIp: 20 };
+    const f = this.config.freeRounds || DEFAULT_FREE_ROUNDS;
     const clamp = (n: unknown, fallback: number) =>
       Number.isFinite(Number(n)) && Number(n) >= 0 ? Math.floor(Number(n)) : fallback;
     return {
@@ -193,6 +201,19 @@ export class AdminConfigService {
       member: clamp(f.member, 10),
       guestPerIp: clamp(f.guestPerIp, 20),
     };
+  }
+
+  /**
+   * The timestamp a round must be newer than to count against the caps above.
+   * Separate from getFreeRounds() because the pure rule counts rounds and does
+   * not care what span they were counted over.
+   */
+  getFreeRoundsSince(now = Date.now()): number {
+    return windowStart(
+      (this.config.freeRounds || DEFAULT_FREE_ROUNDS).windowHours,
+      now,
+      DEFAULT_FREE_ROUNDS.windowHours
+    );
   }
 
   getLanguages(): string[] {

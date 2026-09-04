@@ -56,18 +56,27 @@ const isGuestPlayer = (playerId: string): boolean => {
   return !!user && !user.email;
 };
 
-/** Resolves the live inputs and defers the decision to the pure rule. */
-const roundsLeft = (playerId: string | undefined, ipHash: string | null): number =>
-  computeRoundsLeft({
+/**
+ * Resolves the live inputs and defers the decision to the pure rule.
+ *
+ * ponytail: the window is a sliding N hours, not a calendar day - there is no
+ * timezone to pick and no midnight job to run. The cost is that rounds trickle
+ * back one at a time rather than all at once; move to a local-midnight
+ * boundary if that reads as broken to players.
+ */
+const roundsLeft = (playerId: string | undefined, ipHash: string | null): number => {
+  const since = adminConfigService.getFreeRoundsSince();
+  return computeRoundsLeft({
     playerId,
     ipHash,
     isPremium: !!playerId && authService.isPremiumUser(playerId),
     isGuest: !!playerId && isGuestPlayer(playerId),
     caps: adminConfigService.getFreeRounds(),
-    usedByPlayer: playerId ? db.getRoundStartCount(playerId) : 0,
-    usedByIp: ipHash ? db.getRoundStartCountByIp(ipHash) : 0,
-    bonusRounds: playerId ? db.getBonusRounds(playerId) : 0,
+    usedByPlayer: playerId ? db.getRoundStartCount(playerId, since) : 0,
+    usedByIp: ipHash ? db.getRoundStartCountByIp(ipHash, since) : 0,
+    bonusRounds: playerId ? db.getBonusRounds(playerId, since) : 0,
   });
+};
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';

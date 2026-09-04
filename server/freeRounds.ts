@@ -1,5 +1,8 @@
 /**
- * How many free rounds a player has left.
+ * How many free rounds a player has left in the current window.
+ *
+ * The window itself is the caller's business: this counts against whatever
+ * usage totals it is handed.
  *
  * Kept pure and separate from index.ts so the rule that decides who pays can be
  * tested without booting a server. Every input is already resolved by the
@@ -23,11 +26,11 @@ export interface RoundsLeftInput {
   /** An account is a guest until it has an email on it. */
   isGuest: boolean;
   caps: FreeRoundCaps;
-  /** Rounds this player has started, ever. */
+  /** Rounds this player has started inside the current window. */
   usedByPlayer: number;
-  /** Rounds started from this IP by guests, ever. */
+  /** Rounds started from this IP by guests inside the current window. */
   usedByIp: number;
-  /** Extra rounds earned by watching rewarded ads. */
+  /** Extra rounds earned by watching rewarded ads inside the current window. */
   bonusRounds: number;
 }
 
@@ -56,4 +59,21 @@ export function roundsLeft(input: RoundsLeftInput): number {
   }
 
   return left;
+}
+
+/**
+ * Start of the allowance window, as a timestamp to compare `started_at` against.
+ *
+ * `0` hours means the window never closes - the cap is for life, which is what
+ * this app shipped with. Anything unreadable falls back to `fallback` rather
+ * than to "no window", because a bad value must not hand out free play.
+ */
+export function windowStart(windowHours: unknown, now: number, fallback = 24): number {
+  // Deliberately not Number(): that reads null and '' as 0, and 0 is the one
+  // value here that means something drastic - never reset. A missing field has
+  // to land on the default, not silently reinstate the lifetime cap.
+  const valid =
+    typeof windowHours === 'number' && Number.isFinite(windowHours) && windowHours >= 0;
+  const hours = valid ? windowHours : fallback;
+  return hours === 0 ? 0 : Math.max(0, now - hours * 60 * 60 * 1000);
 }

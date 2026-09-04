@@ -15,6 +15,8 @@ interface FreeRounds {
   guest: number;
   member: number;
   guestPerIp: number;
+  /** Sliding window the allowance is measured over. 0 never resets. */
+  windowHours: number;
 }
 
 interface AdminConfig {

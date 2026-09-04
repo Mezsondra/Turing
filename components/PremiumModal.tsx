@@ -103,7 +103,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
 
   const plans: Array<{ id: PremiumPlan; label: string; price: string; note: string; badge?: string }> = [
     { id: 'monthly', label: t('monthly'), price: '$2.99', note: t('per_month') },
-    { id: 'yearly', label: t('yearly'), price: '$19.99', note: t('per_year'), badge: t('best_value') },
+    { id: 'yearly', label: t('yearly'), price: '$12.99', note: t('per_year'), badge: t('best_value') },
     { id: 'lifetime', label: t('lifetime'), price: '$50', note: t('one_time') },
   ];
 
