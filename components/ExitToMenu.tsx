@@ -21,6 +21,20 @@ const COPY = {
   },
 } as const;
 
+// Android's back button is handled in App, which has no reference to the exit
+// control mounted inside the current screen. A screen renders one of these at
+// a time, so a module slot is enough to reach it.
+// ponytail: one slot, not a stack - if a screen ever shows two, the last one
+// mounted wins; make it a stack then.
+let active: (() => void) | null = null;
+
+/** Runs the mounted exit control's own back behaviour. False when none is mounted. */
+export const requestExitToMenu = (): boolean => {
+  if (!active) return false;
+  active();
+  return true;
+};
+
 /**
  * The way out. Mid-round it confirms first, because leaving forfeits and
  * strands a real partner; after the round it just goes.
@@ -56,6 +70,19 @@ const ExitToMenu: React.FC<{ onExit: () => void; confirm?: boolean; className?: 
     setAsking(false);
     triggerRef.current?.focus();
   };
+
+  // Re-registered every render so the handler closes over current state.
+  useEffect(() => {
+    const handler = () => {
+      if (asking) dismiss();
+      else if (confirm) setAsking(true);
+      else onExit();
+    };
+    active = handler;
+    return () => {
+      if (active === handler) active = null;
+    };
+  });
 
   // Escape out, and keep Tab between the two answers instead of wandering
   // into the live chat behind the dialog.

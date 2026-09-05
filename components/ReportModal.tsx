@@ -32,7 +32,7 @@ const ReportModal: React.FC<ReportModalProps> = ({ onClose, onSubmit }) => {
 
   return (
     <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" data-closing={isClosing}>
-      <div className="modal-panel bg-slate-800 rounded-lg max-w-sm w-full p-6">
+      <div className="modal-panel bg-slate-800 rounded-lg max-w-sm w-full p-6 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {submitted ? (
           <div className="report-state report-confirmation text-center" data-leaving={isSwitching}>
             <div className="text-4xl mb-3">✓</div>

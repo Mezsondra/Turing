@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tailwind slate-900, the app's body background. The window shows through
+         behind the transparent system bars, so it has to match or the bars read
+         as white stripes. -->
+    <color name="appBackground">#0F172A</color>
+</resources>

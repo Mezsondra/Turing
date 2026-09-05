@@ -54,7 +54,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
       aria-labelledby="settings-title"
     >
       <div
-        className="modal-panel bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-700"
+        className="modal-panel bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-700 max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside modal
       >
         <div className="flex justify-between items-center mb-6">

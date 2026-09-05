@@ -108,11 +108,18 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
   ];
 
   return (
-    <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 overflow-y-auto" data-closing={isClosing}>
-      <div className="modal-panel bg-slate-800 rounded-lg max-w-md w-full p-6 relative my-8">
+    <div
+      onClick={(e) => e.target === e.currentTarget && dismiss()}
+      className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4"
+      data-closing={isClosing}
+    >
+      {/* The panel scrolls inside itself rather than the backdrop scrolling:
+          a centred flex child taller than the viewport has its top clipped
+          off-screen, which put the close button out of reach. */}
+      <div className="modal-panel bg-slate-800 rounded-lg max-w-md w-full relative max-h-[calc(100dvh-2rem)] flex flex-col">
         <button
           onClick={() => dismiss()}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"
+          className="absolute top-4 right-4 z-10 text-slate-400 hover:text-slate-200"
           aria-label={t('close')}
         >
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -120,6 +127,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
           </svg>
         </button>
 
+        <div className="overflow-y-auto p-6">
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-500 rounded-full mb-4">
             <span className="text-3xl">⭐</span>
@@ -200,6 +208,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ onClose, onUpgrade, playerI
         <p className="text-slate-500 text-center text-xs mt-4">
           {plan === 'lifetime' ? t('one_time') : t('cancel_anytime')} · {t('secure_payment')}
         </p>
+        </div>
       </div>
     </div>
   );

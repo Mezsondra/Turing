@@ -13,6 +13,17 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- targetSdk 36 forces edge-to-edge: the system bars are transparent and
+             the window background shows through behind them. Left unset it is
+             white in light mode, which is the stripe above and below the app. -->
+        <item name="android:windowBackground">@color/appBackground</item>
+        <!-- Light icons, now that the bars sit on a dark background. -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <!-- Android draws a light contrast scrim behind 3-button navigation
+             unless this is off; that scrim was the stripe along the bottom. -->
+        <item name="android:enforceNavigationBarContrast">false</item>
+        <item name="android:enforceStatusBarContrast">false</item>
     </style>
 
 

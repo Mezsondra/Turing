@@ -124,10 +124,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, reason }) => {
 
   return (
     <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" data-closing={isClosing}>
-      <div className="modal-panel bg-slate-800 rounded-2xl max-w-md w-full p-6 relative">
+      {/* Panel scrolls inside itself: a centred flex child taller than the
+          viewport has its top clipped off-screen, putting the close button
+          out of reach. */}
+      <div className="modal-panel bg-slate-800 rounded-2xl max-w-md w-full relative max-h-[calc(100dvh-2rem)] flex flex-col">
         <button
           onClick={() => dismiss()}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-200"
+          className="absolute top-4 right-4 z-10 text-slate-400 hover:text-slate-200"
           aria-label={t('close')}
         >
           <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -135,6 +138,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, reason }) => {
           </svg>
         </button>
 
+        <div className="overflow-y-auto p-6">
         {step === 'email' ? (
           <>
             <h2 className="text-2xl font-bold text-slate-100 mb-2">{t('sign_in_title')}</h2>
@@ -220,6 +224,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ onClose, reason }) => {
             </div>
           </>
         )}
+        </div>
       </div>
     </div>
   );

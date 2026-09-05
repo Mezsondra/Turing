@@ -14,6 +14,8 @@ import { useAuth } from './context/AuthContext';
 import { useTranslations } from './hooks/useTranslations';
 import { GameState } from './types';
 import { socketService } from './services/socketService';
+import { App as CapacitorApp } from '@capacitor/app';
+import { requestExitToMenu } from './components/ExitToMenu';
 
 const App: React.FC = () => {
   const { isAuthenticated, isPremium, isLoading: isAuthLoading, upgrade } = useAuth();
@@ -99,7 +101,11 @@ const App: React.FC = () => {
 
       setLastGuessCorrect(result.wasCorrect);
       setPendingAd(Boolean(result.shouldShowAd));
-      setScoreData({
+      // Merge, don't replace: the guess result carries no playerId, and
+      // overwriting the stats with it would drop the one the rewarded-video and
+      // restore-purchases buttons need, so they vanish after the first round.
+      setScoreData((prev) => ({
+        ...prev,
         score: result.score,
         gamesPlayed: result.gamesPlayed,
         gamesWon: result.gamesWon,
@@ -107,7 +113,7 @@ const App: React.FC = () => {
         currentStreak: result.currentStreak,
         bestStreak: result.bestStreak,
         timesFooled: result.timesFooled,
-      });
+      }));
       setGameState(GameState.RESULT);
     });
 
@@ -119,6 +125,26 @@ const App: React.FC = () => {
       unsubscribeGuess();
     };
   }, [isAuthLoading]);
+
+  // Android's back button closes the app outright by default. Walk back through
+  // the UI instead - dismiss what is open, then leave only from the welcome
+  // screen, which is the one place there is nothing to go back to.
+  useEffect(() => {
+    const listener = CapacitorApp.addListener('backButton', () => {
+      if (modal !== 'none') {
+        setModal('none');
+        return;
+      }
+      // Each screen's own exit control decides whether leaving needs
+      // confirming, so defer to it rather than duplicating that rule here.
+      if (requestExitToMenu()) return;
+      CapacitorApp.exitApp();
+    });
+
+    return () => {
+      listener.then((handle) => handle.remove());
+    };
+  }, [modal]);
 
   // Recover if an auth surface was opened during the verification frame (for
   // example by a very fast click): once the account resolves, its destination

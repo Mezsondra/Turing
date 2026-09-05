@@ -47,7 +47,7 @@ const AdModal: React.FC<AdModalProps> = ({ onClose, showUpgradeButton = true, on
 
   return (
     <div className="modal-backdrop fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" data-closing={isClosing}>
-      <div className="modal-panel bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative">
+      <div className="modal-panel bg-slate-800 rounded-lg max-w-2xl w-full p-6 relative max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <div className="mb-4">
           <h2 className="text-2xl font-bold text-slate-200 text-center mb-2">
             {hasAdNetwork ? t('ad_break_title') : t('support_us_title')}

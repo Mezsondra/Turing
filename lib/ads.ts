@@ -98,8 +98,10 @@ export async function initAds(): Promise<void> {
 export async function showRewarded(playerId: string): Promise<boolean> {
   if (!isNative()) return false;
 
+  const { AdMob, RewardAdPluginEvents } = await import('@capacitor-community/admob');
+  const listeners: Array<Promise<{ remove: () => Promise<void> }>> = [];
+
   try {
-    const { AdMob } = await import('@capacitor-community/admob');
     await initAds();
     await AdMob.prepareRewardVideoAd({
       adId: rewardedId(),
@@ -107,11 +109,32 @@ export async function showRewarded(playerId: string): Promise<boolean> {
       // view to an account.
       ssv: { customData: playerId },
     });
-    const reward = await AdMob.showRewardVideoAd();
-    return !!reward;
+
+    // The plugin settles showRewardVideoAd when the reward is granted, which is
+    // while the ad is still on screen - returning then would have the caller
+    // pop an alert underneath a fullscreen ad the player cannot dismiss yet.
+    // And it never settles at all when the ad is closed without a reward, which
+    // would hang the caller on a spinner forever. So track the reward, and
+    // return only once the ad itself has gone away.
+    let earned = false;
+    const ended = new Promise<void>((resolve) => {
+      listeners.push(
+        AdMob.addListener(RewardAdPluginEvents.Dismissed, () => resolve()),
+        AdMob.addListener(RewardAdPluginEvents.FailedToShow, () => resolve())
+      );
+    });
+
+    void AdMob.showRewardVideoAd().then((reward) => {
+      earned = !!reward;
+    });
+
+    await ended;
+    return earned;
   } catch (error) {
     console.warn('Rewarded video unavailable:', error);
     return false;
+  } finally {
+    for (const listener of listeners) listener.then((handle) => handle.remove()).catch(() => {});
   }
 }
 

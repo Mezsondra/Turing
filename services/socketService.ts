@@ -65,7 +65,12 @@ export class SocketService {
     if (this.socket?.connected) return Promise.resolve();
     if (this.connecting) return this.connecting;
 
-    this.connecting = new Promise((resolve, reject) => {
+    // Build the socket at most once per app run. A disconnected socket is not
+    // a dead one - socket.io is already retrying it - and replacing it here
+    // would strand every listener bound to the old instance while the new one
+    // carries the match. That is what froze the guess screen: the result came
+    // back on a socket nobody was listening to.
+    if (!this.socket) {
       this.socket = io(this.serverUrl, {
         // A signed-in player is identified by their token; guests by device id.
         auth: { deviceId: getDeviceId(), token: localStorage.getItem('auth_token') || undefined },
@@ -83,11 +88,23 @@ export class SocketService {
         this.pendingGuessResultHandlers.forEach((handler) => {
           this.socket?.on('guess-result', handler);
         });
-        resolve();
       });
 
       this.socket.on('connect_error', (error) => {
         console.error('Connection error:', error);
+      });
+    } else {
+      // Retry now rather than waiting out the backoff.
+      this.socket.connect();
+    }
+
+    const socket = this.socket;
+    this.connecting = new Promise((resolve, reject) => {
+      socket.once('connect', () => {
+        this.connecting = null;
+        resolve();
+      });
+      socket.once('connect_error', (error) => {
         this.connecting = null;
         reject(error);
       });
